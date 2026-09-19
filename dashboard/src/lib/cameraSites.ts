@@ -54,3 +54,9 @@ export function fovConePoints(site: CameraSite, rangeM: number): [number, number
   const right = destinationPoint(site.lat, site.lng, site.headingDeg + half, rangeM)
   return [[site.lat, site.lng], left, right, [site.lat, site.lng]]
 }
+
+/** Same cone, in deck.gl's [lng, lat] winding order for a PolygonLayer,
+ * closed (first point repeated at the end). */
+export function fovConeLngLat(site: CameraSite, rangeM: number): [number, number][] {
+  return fovConePoints(site, rangeM).map(([lat, lng]) => [lng, lat])
+}

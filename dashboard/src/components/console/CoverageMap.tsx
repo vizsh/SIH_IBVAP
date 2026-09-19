@@ -1,88 +1,89 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import L from 'leaflet'
-import 'leaflet.heat'
-import { MapContainer, Marker, Polygon, Popup, TileLayer, useMap } from 'react-leaflet'
-import 'leaflet/dist/leaflet.css'
+import { HeatmapLayer } from '@deck.gl/aggregation-layers'
+import { PolygonLayer, ScatterplotLayer } from '@deck.gl/layers'
+import { MapboxOverlay } from '@deck.gl/mapbox'
+import { Map as MapLibreMap, NavigationControl } from 'maplibre-gl'
+import type { Map as MapLibreMapType } from 'maplibre-gl'
+import 'maplibre-gl/dist/maplibre-gl.css'
 import { API_BASE } from '@/lib/api'
-import { CAMERA_SITES, fovConePoints, siteFor } from '@/lib/cameraSites'
+import { CAMERA_SITES, fovConeLngLat, siteFor } from '@/lib/cameraSites'
 import type { IbvapEvent } from '@/types'
 
-// CARTO's dark-tile endpoint now gates behind an API key (shows a watermark
-// without one) — plain OpenStreetMap tiles need no key at all and never
-// will, so we use those and fake the dark theme with a CSS filter instead.
-const OSM_TILES = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
-const LIVE_THRESHOLD_SECONDS = 6 // telemetry pushes every ~1s from a running pipeline
-const ALERT_WINDOW_SECONDS = 25 // how long a camera's cone stays red after a high-tier event
+// Free, keyless MapLibre-compatible vector style (OpenFreeMap) — CARTO's
+// dark-tile endpoint started gating behind an API key mid-session, so this
+// map never depends on a third-party key at all. Its own base colors are
+// overridden below to a dark tactical palette via setPaintProperty, not a
+// CSS filter hack, since MapLibre's vector layers support that natively.
+const STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty'
+const LIVE_THRESHOLD_SECONDS = 6
+const ALERT_WINDOW_SECONDS = 25
 const CONE_RANGE_M = 22000
+const CONE_HEIGHT_M = 3500
 
 type CameraStatus = 'live' | 'armed' | 'unmonitored'
 
-function radarIcon(color: string, pulsing: boolean, alerting: boolean) {
-  return L.divIcon({
-    className: '',
-    html: `<div class="radar-marker ${alerting ? 'radar-marker--alert' : ''}" style="--radar-color:${color}">
-      ${pulsing ? '<div class="radar-marker__ring"></div>' : ''}
-      <div class="radar-marker__dot"></div>
-    </div>`,
-    iconSize: [16, 16],
-    iconAnchor: [8, 8],
-  })
-}
-
-/** Real event-density heatmap: each event contributes a point jittered
- * around its camera's real coordinates (events carry a camera_id, not a
- * per-event GPS fix), weighted by confidence tier so high-tier clusters
- * actually read hotter than low-tier background noise. */
-function HeatmapLayer({ events }: { events: IbvapEvent[] }) {
-  const map = useMap()
-  const layerRef = useRef<L.Layer | null>(null)
-
-  useEffect(() => {
-    const points: Array<[number, number, number]> = events.map((e) => {
-      const site = siteFor(e.camera_id)
-      // deterministic jitter from event id, not Math.random(), so the
-      // layer doesn't visually reshuffle itself on every re-render
-      const angle = (e.id * 137.5) % 360
-      const jitterM = 400 + (e.id % 9) * 500
-      const rad = (angle * Math.PI) / 180
-      const dLat = (jitterM * Math.cos(rad)) / 111320
-      const dLng = (jitterM * Math.sin(rad)) / (111320 * Math.cos((site.lat * Math.PI) / 180))
-      const weight = e.confidence_tier === 'high' ? 1 : e.confidence_tier === 'medium' ? 0.55 : 0.25
-      return [site.lat + dLat, site.lng + dLng, weight]
-    })
-
-    const layer = L.heatLayer(points, { radius: 28, blur: 22, maxZoom: 10, minOpacity: 0.25 })
-    layer.addTo(map)
-    layerRef.current = layer
-    return () => {
-      layer.remove()
+function darkenStyle(map: MapLibreMapType) {
+  const style = map.getStyle()
+  if (!style?.layers) return
+  for (const layer of style.layers) {
+    try {
+      if (layer.type === 'background') map.setPaintProperty(layer.id, 'background-color', '#05070c')
+      else if (layer.type === 'fill' && /water/i.test(layer.id)) map.setPaintProperty(layer.id, 'fill-color', '#061826')
+      else if (layer.type === 'fill' && /(land|landuse|landcover|park)/i.test(layer.id)) map.setPaintProperty(layer.id, 'fill-color', '#0a0e14')
+      else if (layer.type === 'fill') map.setPaintProperty(layer.id, 'fill-color', '#0c1118')
+      else if (layer.type === 'line' && /(road|highway|street)/i.test(layer.id)) map.setPaintProperty(layer.id, 'line-color', '#1b2838')
+      else if (layer.type === 'line' && /(boundar|border)/i.test(layer.id)) map.setPaintProperty(layer.id, 'line-color', '#f59e0b')
+      else if (layer.type === 'line') map.setPaintProperty(layer.id, 'line-color', '#16202c')
+      else if (layer.type === 'symbol') {
+        map.setPaintProperty(layer.id, 'text-color', '#5b6b7c')
+        map.setPaintProperty(layer.id, 'text-halo-color', '#05070c')
+        map.setPaintProperty(layer.id, 'text-halo-width', 1.2)
+      }
+    } catch {
+      // some style layers don't support every paint property (e.g. raster
+      // sublayers) — skip those rather than let one failure kill the pass
     }
-  }, [map, events])
-
-  return null
-}
-
-/** Flies the map to the most recent high-tier alert's camera the moment it
- * arrives, so a fresh escalation actually pulls the operator's eye instead
- * of sitting silently in a list. */
-function AlertFlyTo({ events }: { events: IbvapEvent[] }) {
-  const map = useMap()
-  const lastHandledId = useRef<number | null>(null)
-
-  useEffect(() => {
-    const latestHigh = events.find((e) => e.confidence_tier === 'high')
-    if (!latestHigh || latestHigh.id === lastHandledId.current) return
-    lastHandledId.current = latestHigh.id
-    const site = siteFor(latestHigh.camera_id)
-    map.flyTo([site.lat, site.lng], Math.max(map.getZoom(), 9), { duration: 1.4 })
-  }, [events, map])
-
-  return null
+  }
 }
 
 export function CoverageMap() {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const mapRef = useRef<MapLibreMapType | null>(null)
+  const overlayRef = useRef<MapboxOverlay | null>(null)
+  const lastFlownId = useRef<number | null>(null)
+
+  const [ready, setReady] = useState(false)
   const [telemetry, setTelemetry] = useState<Record<string, { received_at: number }>>({})
   const [events, setEvents] = useState<IbvapEvent[]>([])
+  const [pulsePhase, setPulsePhase] = useState(0)
+  const [selected, setSelected] = useState<{ camera_id: string; label: string; status: CameraStatus; alerting: boolean } | null>(null)
+
+  useEffect(() => {
+    if (!containerRef.current) return
+    const map = new MapLibreMap({
+      container: containerRef.current,
+      style: STYLE_URL,
+      center: [86.5, 26.8],
+      zoom: 6.6,
+      pitch: 55,
+      bearing: -17,
+      attributionControl: { compact: true },
+    })
+    map.addControl(new NavigationControl({ visualizePitch: true }), 'top-left')
+    map.on('load', () => {
+      darkenStyle(map)
+      const overlay = new MapboxOverlay({ layers: [] })
+      map.addControl(overlay)
+      overlayRef.current = overlay
+      setReady(true)
+    })
+    mapRef.current = map
+    return () => {
+      map.remove()
+      mapRef.current = null
+      overlayRef.current = null
+    }
+  }, [])
 
   useEffect(() => {
     function refresh() {
@@ -100,9 +101,18 @@ export function CoverageMap() {
     return () => clearInterval(interval)
   }, [])
 
+  // Pulse clock for alert cones / rings — deck.gl layers are cheap to
+  // rebuild from small arrays, so a plain interval-driven phase is enough
+  // for a convincing "breathing" animation without a custom shader.
+  useEffect(() => {
+    const id = setInterval(() => setPulsePhase((p) => (p + 1) % 100), 80)
+    return () => clearInterval(id)
+  }, [])
+
   const cameras = useMemo(() => {
     const seen = new Set<string>([...Object.keys(CAMERA_SITES), ...events.map((e) => e.camera_id)])
     const now = Date.now() / 1000
+    const nowMs = Date.now()
     return Array.from(seen).map((camera_id) => {
       const t = telemetry[camera_id]
       const hasHistory = events.some((e) => e.camera_id === camera_id)
@@ -110,7 +120,6 @@ export function CoverageMap() {
       if (t && now - t.received_at < LIVE_THRESHOLD_SECONDS) status = 'live'
       else if (hasHistory) status = 'armed'
 
-      const nowMs = Date.now()
       const alerting = events.some(
         (e) =>
           e.camera_id === camera_id &&
@@ -122,50 +131,127 @@ export function CoverageMap() {
     })
   }, [events, telemetry])
 
-  const center: [number, number] = [26.8, 86.5]
+  // Fly to the newest high-tier alert's camera the moment it arrives.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !ready) return
+    const latestHigh = events.find((e) => e.confidence_tier === 'high')
+    if (!latestHigh || latestHigh.id === lastFlownId.current) return
+    lastFlownId.current = latestHigh.id
+    const site = siteFor(latestHigh.camera_id)
+    map.flyTo({ center: [site.lng, site.lat], zoom: Math.max(map.getZoom(), 10.5), pitch: 60, duration: 1600 })
+  }, [events, ready])
+
+  useEffect(() => {
+    if (!overlayRef.current) return
+
+    const pulse = Math.sin((pulsePhase / 100) * Math.PI * 2)
+    const pulseFast = Math.sin((pulsePhase / 100) * Math.PI * 6)
+
+    const heatPoints = events.map((e) => {
+      const site = siteFor(e.camera_id)
+      const angle = (e.id * 137.5) % 360
+      const jitterM = 400 + (e.id % 9) * 500
+      const rad = (angle * Math.PI) / 180
+      const dLat = (jitterM * Math.cos(rad)) / 111320
+      const dLng = (jitterM * Math.sin(rad)) / (111320 * Math.cos((site.lat * Math.PI) / 180))
+      const weight = e.confidence_tier === 'high' ? 1 : e.confidence_tier === 'medium' ? 0.55 : 0.25
+      return { position: [site.lng + dLng, site.lat + dLat], weight }
+    })
+
+    const coneLayer = new PolygonLayer({
+      id: 'fov-cones',
+      data: cameras.filter((c) => c.status !== 'unmonitored'),
+      getPolygon: (d) => fovConeLngLat(d.site, CONE_RANGE_M).map(([lng, lat]) => [lng, lat, d.alerting ? CONE_HEIGHT_M * (0.7 + 0.3 * pulse) : CONE_HEIGHT_M * 0.4]),
+      extruded: true,
+      wireframe: true,
+      getFillColor: (d) => (d.alerting ? [239, 68, 68, 60 + pulseFast * 30] : d.status === 'live' ? [6, 182, 212, 45] : [245, 158, 11, 30]),
+      getLineColor: (d) => (d.alerting ? [248, 113, 113, 220] : d.status === 'live' ? [34, 211, 238, 160] : [245, 158, 11, 130]),
+      lineWidthMinPixels: 1.5,
+      pickable: false,
+      updateTriggers: { getFillColor: [pulsePhase], getPolygon: [pulsePhase] },
+      transitions: { getFillColor: 150 },
+    })
+
+    const heatLayer = new HeatmapLayer({
+      id: 'event-heatmap',
+      data: heatPoints,
+      getPosition: (d) => d.position,
+      getWeight: (d) => d.weight,
+      radiusPixels: 45,
+      intensity: 1,
+      threshold: 0.03,
+      colorRange: [
+        [10, 20, 40, 0],
+        [11, 61, 145, 140],
+        [56, 189, 248, 170],
+        [245, 158, 11, 200],
+        [239, 68, 68, 230],
+      ],
+    })
+
+    const markerLayer = new ScatterplotLayer({
+      id: 'camera-markers',
+      data: cameras,
+      getPosition: (d) => [d.site.lng, d.site.lat],
+      getRadius: (d) => (d.alerting ? 900 + pulse * 300 : 550),
+      getFillColor: (d) => (d.alerting ? [239, 68, 68, 230] : d.status === 'live' ? [16, 185, 129, 230] : d.status === 'armed' ? [245, 158, 11, 220] : [82, 82, 91, 200]),
+      getLineColor: [5, 7, 12, 255],
+      lineWidthMinPixels: 2,
+      stroked: true,
+      pickable: true,
+      radiusMinPixels: 5,
+      updateTriggers: { getRadius: [pulsePhase], getFillColor: [pulsePhase] },
+      onClick: (info) => {
+        const d = info.object as (typeof cameras)[number] | undefined
+        if (d) setSelected({ camera_id: d.camera_id, label: d.site.label, status: d.status, alerting: d.alerting })
+      },
+    })
+
+    // Extra pulsing ring only on live/alerting cameras, radar-style.
+    const ringLayer = new ScatterplotLayer({
+      id: 'camera-rings',
+      data: cameras.filter((c) => c.status === 'live' || c.alerting),
+      getPosition: (d) => [d.site.lng, d.site.lat],
+      getRadius: (d) => (d.alerting ? 900 : 500) + ((pulsePhase % 100) / 100) * 2200,
+      getFillColor: [0, 0, 0, 0],
+      getLineColor: (d) => {
+        const fade = 1 - (pulsePhase % 100) / 100
+        return d.alerting ? [239, 68, 68, Math.round(180 * fade)] : [16, 185, 129, Math.round(140 * fade)]
+      },
+      stroked: true,
+      filled: false,
+      lineWidthMinPixels: 2,
+      updateTriggers: { getRadius: [pulsePhase], getLineColor: [pulsePhase] },
+    })
+
+    overlayRef.current.setProps({ layers: [heatLayer, coneLayer, ringLayer, markerLayer] })
+  }, [cameras, events, pulsePhase])
 
   return (
-    <MapContainer center={center} zoom={7} className="tactical-map h-full w-full" style={{ background: '#0a0c10' }}>
-      <TileLayer url={OSM_TILES} attribution="&copy; OpenStreetMap contributors" />
-      <HeatmapLayer events={events} />
-      <AlertFlyTo events={events} />
-      {cameras.map((cam) => {
-        const color = cam.alerting ? '#ef4444' : cam.status === 'live' ? '#10b981' : cam.status === 'armed' ? '#f59e0b' : '#52525b'
-        return (
-          <div key={cam.camera_id}>
-            {cam.status !== 'unmonitored' && (
-              <Polygon
-                positions={fovConePoints(cam.site, CONE_RANGE_M)}
-                pathOptions={{
-                  color,
-                  fillColor: color,
-                  fillOpacity: cam.alerting ? 0.22 : 0.08,
-                  weight: cam.alerting ? 2 : 1,
-                  dashArray: cam.alerting ? undefined : '4 6',
-                }}
-              />
-            )}
-            <Marker position={[cam.site.lat, cam.site.lng]} icon={radarIcon(color, cam.status === 'live' || cam.alerting, cam.alerting)}>
-              <Popup>
-                <div className="text-xs">
-                  <div className="font-semibold">{cam.camera_id}</div>
-                  <div>{cam.site.label}</div>
-                  <div className="mt-1 uppercase tracking-wider" style={{ color }}>
-                    {cam.alerting
-                      ? 'ALERT — high-confidence event active'
-                      : cam.status === 'live'
-                        ? 'LIVE — streaming now'
-                        : cam.status === 'armed'
-                          ? 'ARMED — dormant, has history'
-                          : 'NOT YET MONITORED'}
-                  </div>
-                  {cam.eventCount > 0 && <div>{cam.eventCount} events logged</div>}
-                </div>
-              </Popup>
-            </Marker>
+    <div className="relative h-full w-full overflow-hidden rounded-xl border border-zinc-800 bg-[#05070c]">
+      <div ref={containerRef} className="h-full w-full" />
+
+      {selected && (
+        <div className="absolute right-4 top-4 z-10 w-64 rounded-lg border border-zinc-700 bg-zinc-950/90 p-3 text-xs shadow-lg backdrop-blur-sm">
+          <button className="absolute right-2 top-2 text-zinc-500 hover:text-zinc-300" onClick={() => setSelected(null)}>
+            ×
+          </button>
+          <div className="font-semibold text-zinc-100">{selected.camera_id}</div>
+          <div className="text-zinc-500">{selected.label}</div>
+          <div
+            className={`mt-1.5 uppercase tracking-wider ${
+              selected.alerting ? 'text-red-400' : selected.status === 'live' ? 'text-emerald-400' : selected.status === 'armed' ? 'text-amber-400' : 'text-zinc-500'
+            }`}
+          >
+            {selected.alerting ? 'ALERT — high-confidence event active' : selected.status === 'live' ? 'LIVE — streaming now' : selected.status === 'armed' ? 'ARMED — dormant, has history' : 'NOT YET MONITORED'}
           </div>
-        )
-      })}
-    </MapContainer>
+        </div>
+      )}
+
+      {!ready && (
+        <div className="absolute inset-0 flex items-center justify-center text-xs text-zinc-600">Initializing tactical map…</div>
+      )}
+    </div>
   )
 }
