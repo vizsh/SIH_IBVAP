@@ -12,13 +12,14 @@ function shortHash(h: string) {
 function fireTamperAlert(blockId: number) {
   toast.custom(
     () => (
-      <div className="flex w-[520px] max-w-[90vw] items-center gap-3 rounded-xl border border-red-500/60 bg-black/95 px-5 py-4 shadow-[0_0_30px_rgba(239,68,68,0.35)] backdrop-blur-md">
-        <ShieldAlert size={22} className="shrink-0 animate-pulse text-red-500" />
+      <div className="flex w-[520px] max-w-[90vw] items-center gap-3 rounded-xl border border-pink-500/60 bg-black/95 px-5 py-4 shadow-[0_0_30px_rgba(236,72,153,0.45)] backdrop-blur-md">
+        <ShieldAlert size={22} className="shrink-0 animate-pulse text-pink-500" />
         <div className="min-w-0">
-          <div className="text-xs font-bold uppercase tracking-wider text-red-500">Critical — audit log tampering detected</div>
+          <div className="text-xs font-bold uppercase tracking-wider text-pink-500">
+            Critical — cryptographic hash mismatch at block #{blockId}
+          </div>
           <div className="mt-0.5 text-sm text-zinc-200">
-            Hash chain broken at <span className="font-mono font-semibold text-red-400">block #{blockId}</span> — every
-            entry after it is now provably unverifiable.
+            Hash chain broken — every entry after it is now provably unverifiable. Audit integrity preserved.
           </div>
         </div>
       </div>
@@ -109,16 +110,28 @@ export function AuditTerminalWidget() {
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden rounded-b-lg border border-t-0 border-zinc-800 bg-black/95 backdrop-blur-md"
           >
-            <div ref={scrollRef} className="max-h-48 space-y-1 overflow-y-auto px-3 py-2 text-[10px] leading-relaxed text-zinc-500">
-              {entries.map((e) => (
-                <div key={e.id} className="flex items-center gap-1.5">
-                  <span className="text-emerald-600">✓</span>
-                  <span className="text-zinc-600">[{new Date(e.created_at + 'Z').toLocaleTimeString()}]</span>
-                  <span className="text-zinc-400">{e.action.toUpperCase()}</span>
-                  <span className="text-zinc-700">→</span>
-                  <span className="text-cyan-500">{shortHash(e.entry_hash)}</span>
-                </div>
-              ))}
+            <div ref={scrollRef} className="max-h-48 space-y-0 overflow-y-auto px-3 py-2 text-[10px] leading-relaxed text-zinc-500">
+              {entries.map((e, i) => {
+                const broken = brokenBlock != null && e.id >= brokenBlock
+                return (
+                  <div key={e.id} className="relative pl-4">
+                    {i > 0 && (
+                      <div
+                        className={`absolute left-[5px] top-[-6px] h-2 w-px ${broken ? 'bg-pink-500' : 'bg-emerald-700/60'}`}
+                      />
+                    )}
+                    <span className={`absolute left-0 top-[3px] h-2.5 w-2.5 rounded-full border ${broken ? 'border-pink-400 bg-pink-500/30' : 'border-emerald-600 bg-emerald-500/20'}`} />
+                    <div className="flex items-center gap-1.5 py-0.5">
+                      <span className={broken ? 'text-pink-500' : 'text-emerald-600'}>{broken ? '✗' : '✓'}</span>
+                      <span className="text-zinc-600">[{new Date(e.created_at + 'Z').toLocaleTimeString()}]</span>
+                      <span className={broken ? 'text-pink-300' : 'text-zinc-400'}>{e.action.toUpperCase()}</span>
+                      <span className="text-zinc-700">→</span>
+                      <span className={broken ? 'text-pink-400' : 'text-cyan-500'}>{shortHash(e.entry_hash)}</span>
+                      {broken && e.id === brokenBlock && <span className="ml-1 text-pink-400">CHAIN BROKEN HERE</span>}
+                    </div>
+                  </div>
+                )
+              })}
               {entries.length === 0 && <div className="text-zinc-600">awaiting chain activity…</div>}
             </div>
             <div className="border-t border-zinc-800 p-2">

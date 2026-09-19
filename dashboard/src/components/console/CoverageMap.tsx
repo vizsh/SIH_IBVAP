@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { HeatmapLayer } from '@deck.gl/aggregation-layers'
-import { PolygonLayer, ScatterplotLayer } from '@deck.gl/layers'
+import { LineLayer, PolygonLayer, ScatterplotLayer } from '@deck.gl/layers'
 import { MapboxOverlay } from '@deck.gl/mapbox'
 import { Map as MapLibreMap, NavigationControl } from 'maplibre-gl'
 import type { Map as MapLibreMapType } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import { LayoutGrid } from 'lucide-react'
 import { API_BASE } from '@/lib/api'
-import { CAMERA_SITES, fovConeLngLat, siteFor } from '@/lib/cameraSites'
+import { CAMERA_SITES, destinationPoint, fovConeLngLat, siteFor } from '@/lib/cameraSites'
 import type { IbvapEvent } from '@/types'
 
 // Free, keyless MapLibre-compatible vector style (OpenFreeMap) — CARTO's
@@ -19,8 +20,53 @@ const LIVE_THRESHOLD_SECONDS = 6
 const ALERT_WINDOW_SECONDS = 25
 const CONE_RANGE_M = 22000
 const CONE_HEIGHT_M = 3500
+const RETICLE_RANGE_M = 4000
+const GRID_BOUNDS = { minLat: 24.5, maxLat: 28.5, minLng: 83.5, maxLng: 89.5, step: 0.5 }
 
 type CameraStatus = 'live' | 'armed' | 'unmonitored'
+
+/** Four corner brackets of a target-lock reticle, camera-viewfinder style —
+ * each corner is two short line segments meeting at a right angle, rotated
+ * by `rotationDeg` for the "locking on" spin. Real haversine-projected
+ * positions (destinationPoint), not a fixed pixel-space overlay, so it
+ * stays correctly sized/placed regardless of zoom. */
+function reticleBracketSegments(lat: number, lng: number, rangeM: number, rotationDeg: number): [number, number][][] {
+  const corners = [45, 135, 225, 315].map((bearing) => destinationPoint(lat, lng, bearing + rotationDeg, rangeM))
+  const tickLen = rangeM * 0.35
+  const segments: [number, number][][] = []
+  corners.forEach((corner, i) => {
+    const inwardBearing1 = (45 + i * 90 + rotationDeg + 180) % 360
+    const inwardBearing2 = (135 + i * 90 + rotationDeg + 180) % 360
+    const [clat, clng] = corner
+    const tick1 = destinationPoint(clat, clng, inwardBearing1, tickLen)
+    const tick2 = destinationPoint(clat, clng, inwardBearing2, tickLen)
+    segments.push([
+      [clng, clat],
+      [tick1[1], tick1[0]],
+    ])
+    segments.push([
+      [clng, clat],
+      [tick2[1], tick2[0]],
+    ])
+  })
+  return segments
+}
+
+/** A simple lat/lng graticule — the "topographic wireframe grid" toggle.
+ * Honestly just a tactical reference grid, not real elevation-derived
+ * terrain: no DEM tile source is wired up (those require their own API
+ * key), so this doesn't pretend to be more than a military-map-style grid
+ * overlay. */
+function tacticalGridLines(): { from: [number, number]; to: [number, number] }[] {
+  const lines: { from: [number, number]; to: [number, number] }[] = []
+  for (let lat = GRID_BOUNDS.minLat; lat <= GRID_BOUNDS.maxLat; lat += GRID_BOUNDS.step) {
+    lines.push({ from: [GRID_BOUNDS.minLng, lat], to: [GRID_BOUNDS.maxLng, lat] })
+  }
+  for (let lng = GRID_BOUNDS.minLng; lng <= GRID_BOUNDS.maxLng; lng += GRID_BOUNDS.step) {
+    lines.push({ from: [lng, GRID_BOUNDS.minLat], to: [lng, GRID_BOUNDS.maxLat] })
+  }
+  return lines
+}
 
 function darkenStyle(map: MapLibreMapType) {
   const style = map.getStyle()
@@ -56,6 +102,7 @@ export function CoverageMap() {
   const [telemetry, setTelemetry] = useState<Record<string, { received_at: number }>>({})
   const [events, setEvents] = useState<IbvapEvent[]>([])
   const [pulsePhase, setPulsePhase] = useState(0)
+  const [showGrid, setShowGrid] = useState(false)
   const [selected, setSelected] = useState<{ camera_id: string; label: string; status: CameraStatus; alerting: boolean } | null>(null)
 
   useEffect(() => {
@@ -225,12 +272,40 @@ export function CoverageMap() {
       updateTriggers: { getRadius: [pulsePhase], getLineColor: [pulsePhase] },
     })
 
-    overlayRef.current.setProps({ layers: [heatLayer, coneLayer, ringLayer, markerLayer] })
-  }, [cameras, events, pulsePhase])
+    const alertingCam = cameras.find((c) => c.alerting)
+    const reticleLayer = new LineLayer({
+      id: 'target-reticle',
+      data: alertingCam ? reticleBracketSegments(alertingCam.site.lat, alertingCam.site.lng, RETICLE_RANGE_M, (pulsePhase / 100) * 360) : [],
+      getSourcePosition: (d: [number, number][]) => d[0],
+      getTargetPosition: (d: [number, number][]) => d[1],
+      getColor: [255, 255, 255, 230],
+      getWidth: 2.5,
+    })
+
+    const gridLayer = new LineLayer({
+      id: 'tactical-grid',
+      data: showGrid ? tacticalGridLines() : [],
+      getSourcePosition: (d) => d.from,
+      getTargetPosition: (d) => d.to,
+      getColor: [34, 211, 238, 35],
+      getWidth: 1,
+    })
+
+    overlayRef.current.setProps({ layers: [gridLayer, heatLayer, coneLayer, ringLayer, markerLayer, reticleLayer] })
+  }, [cameras, events, pulsePhase, showGrid])
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-xl border border-zinc-800 bg-[#05070c]">
       <div ref={containerRef} className="h-full w-full" />
+
+      <button
+        onClick={() => setShowGrid((v) => !v)}
+        className={`absolute left-4 top-16 z-10 flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider backdrop-blur-sm ${
+          showGrid ? 'border-cyan-500/60 bg-cyan-500/15 text-cyan-300' : 'border-zinc-700 bg-zinc-950/80 text-zinc-400'
+        }`}
+      >
+        <LayoutGrid size={12} /> Tactical grid
+      </button>
 
       {selected && (
         <div className="absolute right-4 top-4 z-10 w-64 rounded-lg border border-zinc-700 bg-zinc-950/90 p-3 text-xs shadow-lg backdrop-blur-sm">

@@ -25,6 +25,16 @@ const SKELETON: [number, number][] = [
 ]
 
 const MIN_CONF = 0.3
+const COMPASS = ['E', 'NE', 'N', 'NW', 'W', 'SW', 'S', 'SE']
+
+// Screen-space heading (0deg = right/east, CCW) expressed as an 8-point
+// compass label purely for readability — same underlying degree value the
+// edge pipeline actually measured, just annotated the way the reference
+// doc's "142DEG SE" mockup reads.
+function compassLabel(deg: number): string {
+  const idx = Math.round(deg / 45) % 8
+  return COMPASS[idx]
+}
 // Real per-track px/s from the edge pipeline's own centroid history — no
 // camera calibration exists to turn this into a real-world m/s figure, so
 // the arrow length is deliberately just a relative visual cue, and the
@@ -34,7 +44,7 @@ const SPEED_ARROW_SCALE = 0.00035
 function Skeleton({ pose }: { pose: PoseData }) {
   const kp = pose.keypoints
   const visible = (i: number) => kp[i] && kp[i][2] >= MIN_CONF
-  const isAlert = pose.behavior === 'SUSPECT CRAWLING / SQUATTING'
+  const isAlert = pose.behavior === 'SUSPECT CRAWLING'
   const color = isAlert ? '#f87171' : '#34d399'
 
   const shoulderPts = [5, 6].filter(visible).map((i) => kp[i])
@@ -89,15 +99,21 @@ function Skeleton({ pose }: { pose: PoseData }) {
       )}
 
       {labelPos && (
-        <foreignObject x={labelPos[0] * 100 - 15} y={Math.max(0, labelPos[1] * 100 - 8)} width="30" height="6">
+        <foreignObject x={labelPos[0] * 100 - 20} y={Math.max(0, labelPos[1] * 100 - 12)} width="40" height="11">
           <div
-            className={`whitespace-nowrap text-center font-mono text-[2.2px] font-bold uppercase tracking-wider ${
+            className={`whitespace-nowrap text-center font-mono text-[1.9px] font-bold uppercase tracking-wider ${
               isAlert ? 'text-red-400' : 'text-emerald-400'
             }`}
             style={{ textShadow: '0 0 2px black' }}
           >
-            #{pose.track_id} {pose.behavior ?? 'TRACKING'}
-            {pose.speed_px_s != null && pose.speed_px_s > 5 ? ` · ${pose.speed_px_s.toFixed(0)}px/s` : ''}
+            <div>
+              #{pose.track_id} · POSE: {pose.behavior ?? 'ANALYZING'}
+            </div>
+            {pose.heading_deg != null && pose.speed_px_s != null && pose.speed_px_s > 5 && (
+              <div className="text-amber-300">
+                HEADING: {pose.heading_deg.toFixed(0)}° {compassLabel(pose.heading_deg)} · SPEED: {pose.speed_px_s.toFixed(0)}px/s
+              </div>
+            )}
           </div>
         </foreignObject>
       )}

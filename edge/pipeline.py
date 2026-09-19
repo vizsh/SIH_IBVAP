@@ -117,8 +117,8 @@ def classify_posture(keypoints: np.ndarray) -> str | None:
 
     ratio = upper_leg_span / torso_span
     if ratio < 0.35:
-        return "SUSPECT CRAWLING / SQUATTING"
-    return "PEDESTRIAN"
+        return "SUSPECT CRAWLING"
+    return "CIVILIAN"
 
 
 def post_event(backend_url: str, **kwargs) -> dict | None:
