@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, XAxis } from 'recharts'
+import { CameraStatusGrid } from '@/components/console/CameraStatusGrid'
+import { ThreatLevelGauge } from '@/components/console/ThreatLevelGauge'
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
 import { API_BASE } from '@/lib/api'
 import type { IbvapEvent } from '@/types'
@@ -15,13 +17,6 @@ const EVENT_LABELS: Record<string, string> = {
 
 const typeChartConfig: ChartConfig = {
   count: { label: 'Events', color: '#22d3ee' },
-}
-
-const TIER_COLORS: Record<string, string> = { high: '#ef4444', medium: '#f59e0b', low: '#10b981' }
-const tierChartConfig: ChartConfig = {
-  high: { label: 'High confidence', color: TIER_COLORS.high },
-  medium: { label: 'Medium confidence', color: TIER_COLORS.medium },
-  low: { label: 'Low confidence', color: TIER_COLORS.low },
 }
 
 export default function AnalyticsPage() {
@@ -41,12 +36,7 @@ export default function AnalyticsPage() {
     }, {}),
   ).map(([type, count]) => ({ type: EVENT_LABELS[type] ?? type, count }))
 
-  const byTier = Object.entries(
-    events.reduce<Record<string, number>>((acc, e) => {
-      acc[e.confidence_tier] = (acc[e.confidence_tier] ?? 0) + 1
-      return acc
-    }, {}),
-  ).map(([tier, count]) => ({ tier, count }))
+  const highCount = events.filter((e) => e.confidence_tier === 'high').length
 
   return (
     <div>
@@ -57,8 +47,13 @@ export default function AnalyticsPage() {
         </p>
       </header>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
+      <div className="grid grid-cols-3 gap-4">
+        <div className="col-span-1 rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
+          <div className="mb-1 text-xs font-semibold uppercase tracking-wider text-zinc-400">System threat level</div>
+          <ThreatLevelGauge high={highCount} total={events.length} />
+        </div>
+
+        <div className="col-span-2 rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
           <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">Events by type</div>
           <ChartContainer config={typeChartConfig} className="aspect-auto h-[260px] w-full">
             <BarChart data={byType}>
@@ -69,20 +64,11 @@ export default function AnalyticsPage() {
             </BarChart>
           </ChartContainer>
         </div>
+      </div>
 
-        <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
-          <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">Confidence-tier distribution</div>
-          <ChartContainer config={tierChartConfig} className="aspect-auto h-[260px] w-full">
-            <PieChart>
-              <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-              <Pie data={byTier} dataKey="count" nameKey="tier" innerRadius={60} outerRadius={95} paddingAngle={2}>
-                {byTier.map((entry) => (
-                  <Cell key={entry.tier} fill={TIER_COLORS[entry.tier] ?? '#71717a'} />
-                ))}
-              </Pie>
-            </PieChart>
-          </ChartContainer>
-        </div>
+      <div className="mt-4">
+        <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">Per-camera status</div>
+        <CameraStatusGrid events={events} />
       </div>
 
       <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-xs text-amber-200/80">

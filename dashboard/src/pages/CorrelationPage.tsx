@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Radar, Zap } from 'lucide-react'
+import { BopMap } from '@/components/console/BopMap'
 import { CorrelationDemoTrigger } from '@/components/console/CorrelationBanner'
 import { GlowingEffect } from '@/components/glowing-effect'
 import { API_BASE } from '@/lib/api'
@@ -12,12 +13,13 @@ function timeAgo(iso: string): string {
 }
 
 export default function CorrelationPage() {
-  const [matches, setMatches] = useState<IbvapEvent[]>([])
+  const [allEvents, setAllEvents] = useState<IbvapEvent[]>([])
+  const matches = allEvents.filter((e) => e.event_type === 'correlation_match')
 
   useEffect(() => {
     fetch(`${API_BASE}/events?limit=500`)
       .then((r) => r.json())
-      .then((events: IbvapEvent[]) => setMatches(events.filter((e) => e.event_type === 'correlation_match')))
+      .then(setAllEvents)
       .catch(() => {})
   }, [])
 
@@ -31,6 +33,10 @@ export default function CorrelationPage() {
           (see <code className="rounded bg-zinc-800 px-1 py-0.5">backend/app/correlation.py</code>).
         </p>
       </header>
+
+      <div className="mb-4 h-[340px] overflow-hidden rounded-xl border border-zinc-800">
+        <BopMap events={allEvents} />
+      </div>
 
       <div className="mb-4 rounded-xl border border-zinc-800/60 bg-zinc-950/40 p-4 text-xs text-zinc-500">
         To generate a real match: run two edge pipeline processes with different{' '}
