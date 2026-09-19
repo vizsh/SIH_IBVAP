@@ -31,6 +31,13 @@ export interface IbvapEvent {
   elapsed_minutes: number | null
   from_camera_id: string | null
   ocr_samples: OcrSample[] | null
+  trail: TrailPoint[] | null
+}
+
+export interface TrailPoint {
+  x: number
+  y: number
+  t: number
 }
 
 export interface OcrSample {

@@ -49,6 +49,15 @@ class EventIn(BaseModel):
     # UI can show the actual multi-frame voting matrix, not just the answer.
     ocr_samples: Optional[list[dict]] = None
 
+    # virtual_fence_intrusion / loitering only: the real recent centroid
+    # history for the track that fired this alert — [{x, y, t}, ...] in
+    # normalized 0-1 frame-space coordinates plus a wall-clock timestamp, up
+    # to 5 minutes back. Powers the "Shadow Ghost Replay" scrubber. Deliberately
+    # frame-space, not a geo path — no camera here is calibrated to convert
+    # pixels to real-world coordinates, so plotting this on a map would
+    # fabricate a precision that doesn't exist.
+    trail: Optional[list[dict]] = None
+
 
 class EventOut(EventIn):
     id: int

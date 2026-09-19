@@ -2,12 +2,22 @@ import { useRef, useState } from 'react'
 import { Camera, ScanLine } from 'lucide-react'
 import Crosshair from '@/components/Crosshair'
 import { AnprVotingCard } from '@/components/console/AnprVotingCard'
+import { GhostReplay } from '@/components/console/GhostReplay'
 import { PoseOverlay } from '@/components/console/PoseOverlay'
 import { TacticalOverlay } from '@/components/console/TacticalOverlay'
 import { useEdgeStream } from '@/hooks/useEdgeStream'
 import { useTelemetry } from '@/hooks/useTelemetry'
+import type { IbvapEvent } from '@/types'
 
-export function VideoPane({ cameraId = 'BOP-01' }: { cameraId?: string }) {
+export function VideoPane({
+  cameraId = 'BOP-01',
+  replayEvent,
+  onCloseReplay,
+}: {
+  cameraId?: string
+  replayEvent?: IbvapEvent | null
+  onCloseReplay?: () => void
+}) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [showAnpr, setShowAnpr] = useState(false)
   const stream = useEdgeStream(cameraId)
@@ -66,6 +76,10 @@ export function VideoPane({ cameraId = 'BOP-01' }: { cameraId?: string }) {
           <div className="absolute bottom-4 right-4 z-20">
             <AnprVotingCard />
           </div>
+        )}
+
+        {replayEvent && replayEvent.camera_id === cameraId && (
+          <GhostReplay event={replayEvent} onClose={() => onCloseReplay?.()} />
         )}
       </div>
     </div>

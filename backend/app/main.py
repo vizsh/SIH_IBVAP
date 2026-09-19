@@ -76,6 +76,7 @@ def _event_out(row: dbm.Event) -> EventOut:
         elapsed_minutes=row.elapsed_minutes,
         from_camera_id=row.from_camera_id,
         ocr_samples=json.loads(row.ocr_samples_json) if row.ocr_samples_json else None,
+        trail=json.loads(row.trail_json) if row.trail_json else None,
     )
 
 
@@ -135,6 +136,7 @@ async def create_event(event: EventIn, db: Session = Depends(dbm.get_db)):
         elapsed_minutes=event.elapsed_minutes,
         from_camera_id=event.from_camera_id,
         ocr_samples_json=json.dumps(event.ocr_samples) if event.ocr_samples else None,
+        trail_json=json.dumps(event.trail) if event.trail else None,
     )
     db.add(row)
     db.commit()

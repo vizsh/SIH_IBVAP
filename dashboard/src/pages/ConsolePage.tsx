@@ -15,6 +15,7 @@ import type { IbvapEvent } from '@/types'
 export default function ConsolePage() {
   const { events, setEvents, connState } = useLiveEvents()
   const [bufferedCount, setBufferedCount] = useState(0)
+  const [replayEvent, setReplayEvent] = useState<IbvapEvent | null>(null)
 
   function onUpdate(id: number, status: IbvapEvent['status']) {
     setEvents((prev) => prev.map((e) => (e.id === id ? { ...e, status } : e)))
@@ -47,7 +48,7 @@ export default function ConsolePage() {
       <div className="grid grid-cols-3 gap-4">
         <div className="col-span-2 space-y-4">
           <div className="h-[420px]">
-            <VideoPane />
+            <VideoPane replayEvent={replayEvent} onCloseReplay={() => setReplayEvent(null)} />
           </div>
           <BentoGrid className="max-w-none gap-4 md:auto-rows-[9.5rem] md:grid-cols-3">
             <div className="h-full md:col-span-1">
@@ -62,7 +63,7 @@ export default function ConsolePage() {
           </BentoGrid>
         </div>
         <div className="col-span-1 h-[560px]">
-          <AlertQueue events={events} onUpdate={onUpdate} />
+          <AlertQueue events={events} onUpdate={onUpdate} onReplay={setReplayEvent} />
         </div>
       </div>
     </div>

@@ -193,6 +193,21 @@ def main():
     plate_voters: dict[int, PlateVoter] = {}
     plate_posted: dict[int, str] = {}
     position_history: dict[int, deque[tuple[float, float, float]]] = {}  # track_id -> deque[(cx, cy, t)]
+    # Longer-term ghost trail (Shadow Ghost Replay): coarser-sampled real
+    # centroid history, kept up to TRAIL_WINDOW_SECONDS, attached to whatever
+    # alert fires so the dashboard can scrub back through *this track's own
+    # recorded frame-space positions* — not a fabricated geo-path, since no
+    # camera here is calibrated to convert pixels to real-world coordinates.
+    trail_history: dict[int, deque[tuple[float, float, float]]] = {}
+    last_trail_sample: dict[int, float] = {}
+    TRAIL_WINDOW_SECONDS = 300.0
+    TRAIL_SAMPLE_INTERVAL = 1.0
+
+    def trail_payload(track_id: int) -> list[dict] | None:
+        trail = trail_history.get(track_id)
+        if not trail:
+            return None
+        return [{"x": round(x / w, 4), "y": round(y / h, 4), "t": t} for x, y, t in trail]
     latest_poses: list[dict] = []  # last computed pose payload, reused between throttled inference frames
     MIN_OCR_SAMPLES = 5
     OCR_EVERY_N_FRAMES = 5  # EasyOCR is slow on CPU; throttle per track
@@ -271,6 +286,7 @@ def main():
                         track_id=track_id,
                         zone_id="zone-A",
                         detail=f"sustained {dwell_in_zone:.1f}s in zone, track {track_id}",
+                        trail=trail_payload(track_id),
                     )
                     if created:
                         pending_evidence.append(created["id"])
@@ -292,6 +308,13 @@ def main():
                 cx, cy = float((bx1 + bx2) / 2), float((by1 + by2) / 2)
                 reset_px = LOITER_RESET_FRACTION * w
 
+                trail = trail_history.setdefault(track_id, deque())
+                if now - last_trail_sample.get(track_id, 0.0) >= TRAIL_SAMPLE_INTERVAL:
+                    last_trail_sample[track_id] = now
+                    trail.append((cx, cy, now))
+                    while trail and now - trail[0][2] > TRAIL_WINDOW_SECONDS:
+                        trail.popleft()
+
                 anchor = loiter_anchor.get(track_id)
                 if anchor is None or np.hypot(cx - anchor[0], cy - anchor[1]) > reset_px:
                     loiter_anchor[track_id] = (cx, cy, now)
@@ -311,6 +334,7 @@ def main():
                         track_id=track_id,
                         dwell_seconds=dwell_near_spot,
                         detail=f"track {track_id} stationary near one spot for {dwell_near_spot:.0f}s",
+                        trail=trail_payload(track_id),
                     )
                     if created:
                         pending_evidence.append(created["id"])

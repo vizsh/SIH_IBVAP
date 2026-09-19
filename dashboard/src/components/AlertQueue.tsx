@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Layers } from 'lucide-react'
+import { Layers, Rewind } from 'lucide-react'
 import { reviewEvent } from '../lib/api'
 import { cn } from '@/lib/utils'
 import { GlowingEffect } from '@/components/glowing-effect'
@@ -34,7 +34,17 @@ function timeAgo(iso: string): string {
   return `${Math.floor(seconds / 60)}m ago`
 }
 
-function AlertCard({ e, onConfirm, onDismiss }: { e: IbvapEvent; onConfirm: () => void; onDismiss: (reason: string) => void }) {
+function AlertCard({
+  e,
+  onConfirm,
+  onDismiss,
+  onReplay,
+}: {
+  e: IbvapEvent
+  onConfirm: () => void
+  onDismiss: (reason: string) => void
+  onReplay?: (e: IbvapEvent) => void
+}) {
   return (
     <motion.div
       layout
@@ -55,6 +65,15 @@ function AlertCard({ e, onConfirm, onDismiss }: { e: IbvapEvent; onConfirm: () =
           </div>
           <TierPill tier={e.confidence_tier} />
         </div>
+
+        {e.trail && e.trail.length >= 2 && onReplay && (
+          <button
+            onClick={() => onReplay(e)}
+            className="mt-1.5 flex items-center gap-1.5 rounded-md border border-violet-700/50 bg-violet-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-violet-300 hover:bg-violet-500/20"
+          >
+            <Rewind size={11} /> Shadow ghost replay
+          </button>
+        )}
 
         <ConfidenceGauge confidence={e.confidence} tier={e.confidence_tier} />
 
@@ -104,9 +123,11 @@ function ClusterCard({ events }: { events: IbvapEvent[] }) {
 export function AlertQueue({
   events,
   onUpdate,
+  onReplay,
 }: {
   events: IbvapEvent[]
   onUpdate: (id: number, status: IbvapEvent['status']) => void
+  onReplay?: (e: IbvapEvent) => void
 }) {
   const items = useMemo(() => groupEvents(events), [events])
 
@@ -131,6 +152,7 @@ export function AlertQueue({
                 e={item.event}
                 onConfirm={() => handle(item.event.id, 'confirm')}
                 onDismiss={(reason) => handle(item.event.id, 'dismiss', reason)}
+                onReplay={onReplay}
               />
             ) : (
               <ClusterCard key={`cluster-${item.events[0].id}`} events={item.events} />
