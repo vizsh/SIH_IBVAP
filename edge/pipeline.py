@@ -56,14 +56,28 @@ def default_zone(width: int, height: int) -> np.ndarray:
     return np.array([[int(x * width), int(y * height)] for x, y in pts])
 
 
-def post_event(backend_url: str, **kwargs):
+def post_event(backend_url: str, **kwargs) -> dict | None:
     # A malformed payload or a dead backend must never take the detection
     # loop down with it — this is best-effort telemetry, not the pipeline's
-    # own state.
+    # own state. Returns the created event (with its id) on success so the
+    # caller can attach an evidence snapshot to it.
     try:
-        requests.post(backend_url, json=kwargs, timeout=1.5)
+        resp = requests.post(backend_url, json=kwargs, timeout=1.5)
+        resp.raise_for_status()
+        return resp.json()
     except Exception as e:
         print(f"[warn] backend POST failed: {e}")
+        return None
+
+
+def post_evidence(backend_url: str, event_id: int, jpg_bytes: bytes) -> None:
+    # The actual annotated frame that triggered the alert — not a text
+    # description of it. Best-effort, same reasoning as post_event.
+    evidence_url = backend_url.replace("/events", f"/events/{event_id}/evidence")
+    try:
+        requests.post(evidence_url, files={"file": ("evidence.jpg", jpg_bytes, "image/jpeg")}, timeout=2.0)
+    except Exception as e:
+        print(f"[warn] evidence upload failed for event {event_id}: {e}")
 
 
 def main():
@@ -111,6 +125,7 @@ def main():
 
     start = time.time()
     frame_count = 0
+    pending_evidence: list[int] = []  # event ids fired this frame, awaiting their snapshot
     frame_times: deque[float] = deque(maxlen=30)  # rolling window for a real FPS reading
     last_telemetry_push = 0.0
 
@@ -144,7 +159,7 @@ def main():
             if track_id not in detected_fired:
                 detected_fired.add(track_id)
                 x1, y1, x2, y2 = (float(v) for v in detections.xyxy[i])
-                post_event(
+                created = post_event(
                     args.backend,
                     camera_id=args.camera_id,
                     event_type="person_detected" if kind == "person" else "vehicle_detected",
@@ -153,6 +168,8 @@ def main():
                     bbox=[x1 / w, y1 / h, x2 / w, y2 / h],
                     detail=f"YOLOv8n+ByteTrack, track {track_id}",
                 )
+                if created:
+                    pending_evidence.append(created["id"])
 
             # Virtual-fence intrusion: sustained-frame (time-based) confirmation.
             inside = bool(in_zone[i]) if i < len(in_zone) else False
@@ -161,7 +178,7 @@ def main():
                 dwell_in_zone = now - zone_entry[track_id]
                 if dwell_in_zone >= INTRUSION_CONFIRM_SECONDS and track_id not in intrusion_fired:
                     intrusion_fired.add(track_id)
-                    post_event(
+                    created = post_event(
                         args.backend,
                         camera_id=args.camera_id,
                         event_type="virtual_fence_intrusion",
@@ -170,6 +187,8 @@ def main():
                         zone_id="zone-A",
                         detail=f"sustained {dwell_in_zone:.1f}s in zone, track {track_id}",
                     )
+                    if created:
+                        pending_evidence.append(created["id"])
             else:
                 zone_entry.pop(track_id, None)
                 intrusion_fired.discard(track_id)
@@ -199,7 +218,7 @@ def main():
                 dwell_near_spot = now - anchor_time
                 if dwell_near_spot >= LOITER_THRESHOLD_SECONDS and track_id not in loiter_fired:
                     loiter_fired.add(track_id)
-                    post_event(
+                    created = post_event(
                         args.backend,
                         camera_id=args.camera_id,
                         event_type="loitering",
@@ -208,6 +227,8 @@ def main():
                         dwell_seconds=dwell_near_spot,
                         detail=f"track {track_id} stationary near one spot for {dwell_near_spot:.0f}s",
                     )
+                    if created:
+                        pending_evidence.append(created["id"])
 
             plate_label = ""
             if kind == "vehicle":
@@ -226,7 +247,7 @@ def main():
                     plate_label = f" [{plate}]"
                     if plate_posted.get(track_id) != plate:
                         plate_posted[track_id] = plate
-                        post_event(
+                        created = post_event(
                             args.backend,
                             camera_id=args.camera_id,
                             event_type="anpr_read",
@@ -235,6 +256,8 @@ def main():
                             plate_text=plate,
                             detail=f"multi-frame fusion, {len(voter.samples)} samples, {accuracy:.1f}% fused accuracy",
                         )
+                        if created:
+                            pending_evidence.append(created["id"])
 
             labels.append(f"#{track_id} {kind} {conf:.2f}{plate_label}" + (" [ZONE]" if inside else ""))
 
@@ -270,10 +293,15 @@ def main():
 
         if args.save_frame:
             cv2.imwrite(args.save_frame, annotated)
-        if args.stream_port:
-            ok, jpg = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        if args.stream_port or pending_evidence:
+            ok, jpg = cv2.imencode(".jpg", annotated, [cv2.IMWRITE_JPEG_QUALITY, 85])
             if ok:
-                broadcaster.update(jpg.tobytes())
+                jpg_bytes = jpg.tobytes()
+                if args.stream_port:
+                    broadcaster.update(jpg_bytes)
+                for event_id in pending_evidence:
+                    post_evidence(args.backend, event_id, jpg_bytes)
+                pending_evidence.clear()
         if args.show:
             cv2.imshow("IBVAP edge pipeline", annotated)
             if cv2.waitKey(1) & 0xFF == ord("q"):

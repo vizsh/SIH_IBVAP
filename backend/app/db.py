@@ -30,6 +30,7 @@ class Event(Base):
     frame_timestamp = Column(Float, nullable=True)
     detail = Column(String, nullable=True)
     status = Column(String, default="pending")
+    evidence_filename = Column(String, nullable=True)
     created_at = Column(DateTime, default=utcnow)
 
 

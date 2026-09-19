@@ -40,6 +40,7 @@ class EventOut(EventIn):
     confidence_tier: ConfidenceTier
     status: str  # "pending" | "confirmed" | "dismissed" | "auto_escalated"
     created_at: datetime
+    evidence_url: Optional[str] = None  # the actual annotated frame that triggered this alert
 
     class Config:
         from_attributes = True

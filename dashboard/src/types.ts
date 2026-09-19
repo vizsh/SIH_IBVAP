@@ -24,6 +24,7 @@ export interface IbvapEvent {
   detail: string | null
   status: EventStatus
   created_at: string
+  evidence_url: string | null
 }
 
 export interface AuditEntry {

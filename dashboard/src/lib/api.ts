@@ -9,6 +9,12 @@ import type { IbvapEvent } from '../types'
 const API_ORIGIN = import.meta.env.VITE_API_URL as string | undefined
 export const API_BASE = API_ORIGIN ? API_ORIGIN.replace(/\/$/, '') : '/api'
 
+// Evidence images are served as static files at the backend's root
+// (/evidence/*), not under /api, and Vite's proxy only rewrites /api/* — so
+// these need the real backend origin directly, same reasoning as the MJPEG
+// stream (see useEdgeStream.ts).
+export const BACKEND_ORIGIN = API_ORIGIN ?? 'http://127.0.0.1:8000'
+
 export async function fetchEvents(): Promise<IbvapEvent[]> {
   const res = await fetch(`${API_BASE}/events`)
   if (!res.ok) throw new Error('failed to fetch events')
