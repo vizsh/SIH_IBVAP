@@ -1,12 +1,15 @@
 """
-IBVAP edge pipeline — Phase 2, Stage 1: YOLOv8n detection + ByteTrack tracking
-+ virtual-fence intrusion + loitering, on any video source (file, RTSP, or a
-webcam index), POSTing real events to the backend's existing /events contract.
+IBVAP edge pipeline — Phase 2: YOLOv8n detection + ByteTrack tracking,
+virtual-fence intrusion, person loitering, and multi-frame ANPR fusion, on
+any video source (file, RTSP, or a webcam index), POSTing real events to
+the backend's existing /events contract.
 
 Reference doc Section 4: sustained-frame confirmation suppresses single-frame
-detector jitter; loitering fires when T(id) = t_now - t_first_seen exceeds a
-threshold. Both are implemented here as time-based (not raw frame-count) so
-the logic is correct regardless of the source's actual FPS.
+detector jitter (virtual-fence intrusion). Loitering (Case 9) is specifically
+person reconnaissance behaviour — stationary or pacing NEAR one spot — so it
+excludes vehicles entirely and resets its dwell clock whenever a person's
+centroid drifts meaningfully away from where the clock started, rather than
+just accumulating total time visible on camera.
 """
 
 import argparse
@@ -28,6 +31,7 @@ TRACKED_CLASSES = {PERSON_CLASS, *VEHICLE_CLASSES}
 
 INTRUSION_CONFIRM_SECONDS = 0.6  # doc: n~=3 frames @ 5fps
 LOITER_THRESHOLD_SECONDS = 20.0  # demo value; production default is 90s (doc Section 4)
+LOITER_RESET_FRACTION = 0.15  # centroid drift past this fraction of frame width resets the loiter clock
 
 
 def parse_args():
@@ -93,10 +97,10 @@ def main():
         start_server(broadcaster, args.stream_port)
         print(f"[edge] MJPEG preview: http://127.0.0.1:{args.stream_port}/stream")
 
-    first_seen: dict[int, float] = {}
     zone_entry: dict[int, float] = {}
     intrusion_fired: set[int] = set()
     loiter_fired: set[int] = set()
+    loiter_anchor: dict[int, tuple[float, float, float]] = {}  # track_id -> (x, y, anchor_time)
     detected_fired: set[int] = set()
     plate_voters: dict[int, PlateVoter] = {}
     plate_posted: dict[int, str] = {}
@@ -132,9 +136,6 @@ def main():
             conf = float(detections.confidence[i])
             kind = "person" if class_id == PERSON_CLASS else "vehicle"
 
-            if track_id not in first_seen:
-                first_seen[track_id] = now
-
             # Fire a one-shot detection event the first time a track is confirmed.
             if track_id not in detected_fired:
                 detected_fired.add(track_id)
@@ -169,19 +170,40 @@ def main():
                 zone_entry.pop(track_id, None)
                 intrusion_fired.discard(track_id)
 
-            # Loitering: total time-in-frame past threshold, regardless of zone.
-            total_dwell = now - first_seen[track_id]
-            if total_dwell >= LOITER_THRESHOLD_SECONDS and track_id not in loiter_fired:
-                loiter_fired.add(track_id)
-                post_event(
-                    args.backend,
-                    camera_id=args.camera_id,
-                    event_type="loitering",
-                    confidence=0.95,
-                    track_id=track_id,
-                    dwell_seconds=total_dwell,
-                    detail=f"track {track_id} present {total_dwell:.0f}s",
-                )
+            # Loitering (doc Case 9): person reconnaissance behaviour — stationary
+            # or pacing NEAR one spot. Two things a naive "time visible" proxy
+            # gets wrong, both fixed here:
+            #  1. It's a person concept, not a vehicle one — a parked car isn't
+            #     "loitering", it's parked. Vehicles are excluded entirely.
+            #  2. Someone walking steadily across the frame for 20s+ isn't
+            #     loitering either — track centroid drift and reset the dwell
+            #     clock once they've moved meaningfully away from where the
+            #     clock started, so only bounded stay-in-place time counts.
+            if kind == "person":
+                bx1, by1, bx2, by2 = detections.xyxy[i]
+                cx, cy = float((bx1 + bx2) / 2), float((by1 + by2) / 2)
+                reset_px = LOITER_RESET_FRACTION * w
+
+                anchor = loiter_anchor.get(track_id)
+                if anchor is None or np.hypot(cx - anchor[0], cy - anchor[1]) > reset_px:
+                    loiter_anchor[track_id] = (cx, cy, now)
+                    loiter_fired.discard(track_id)
+                    anchor_time = now
+                else:
+                    anchor_time = anchor[2]
+
+                dwell_near_spot = now - anchor_time
+                if dwell_near_spot >= LOITER_THRESHOLD_SECONDS and track_id not in loiter_fired:
+                    loiter_fired.add(track_id)
+                    post_event(
+                        args.backend,
+                        camera_id=args.camera_id,
+                        event_type="loitering",
+                        confidence=0.95,
+                        track_id=track_id,
+                        dwell_seconds=dwell_near_spot,
+                        detail=f"track {track_id} stationary near one spot for {dwell_near_spot:.0f}s",
+                    )
 
             plate_label = ""
             if kind == "vehicle":
