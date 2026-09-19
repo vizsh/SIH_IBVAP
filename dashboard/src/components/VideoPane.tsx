@@ -9,7 +9,7 @@ import { useTelemetry } from '@/hooks/useTelemetry'
 export function VideoPane({ cameraId = 'BOP-01' }: { cameraId?: string }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [showAnpr, setShowAnpr] = useState(false)
-  const stream = useEdgeStream()
+  const stream = useEdgeStream(cameraId)
   const telemetry = useTelemetry(cameraId)
 
   return (
@@ -50,7 +50,9 @@ export function VideoPane({ cameraId = 'BOP-01' }: { cameraId?: string }) {
             <Camera size={40} strokeWidth={1.2} />
             <span className="text-xs">
               Edge pipeline not running — start it with{' '}
-              <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-400">python edge/pipeline.py</code>
+              <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-400">
+                python edge/pipeline.py --camera-id {cameraId} --stream-port {cameraId === 'BOP-Alpha' ? 8092 : cameraId === 'BOP-Bravo' ? 8093 : 8091}
+              </code>
             </span>
           </div>
         )}

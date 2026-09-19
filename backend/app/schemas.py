@@ -34,6 +34,16 @@ class EventIn(BaseModel):
     frame_timestamp: Optional[float] = None  # seconds into source video, for replay sync
     detail: Optional[str] = None  # short human-readable extra context
 
+    # correlation_match only: real haversine-distance-based prediction
+    # (Section 4's "distance ÷ plausible speed range" formula), plus the
+    # actual elapsed time between the two sightings, for the transit
+    # corridor gauge — not present on any other event type.
+    distance_km: Optional[float] = None
+    travel_min_minutes: Optional[float] = None
+    travel_max_minutes: Optional[float] = None
+    elapsed_minutes: Optional[float] = None
+    from_camera_id: Optional[str] = None
+
 
 class EventOut(EventIn):
     id: int

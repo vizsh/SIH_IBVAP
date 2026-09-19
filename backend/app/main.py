@@ -69,6 +69,11 @@ def _event_out(row: dbm.Event) -> EventOut:
         status=row.status,
         created_at=row.created_at,
         evidence_url=f"/evidence/{row.evidence_filename}" if row.evidence_filename else None,
+        distance_km=row.distance_km,
+        travel_min_minutes=row.travel_min_minutes,
+        travel_max_minutes=row.travel_max_minutes,
+        elapsed_minutes=row.elapsed_minutes,
+        from_camera_id=row.from_camera_id,
     )
 
 
@@ -122,6 +127,11 @@ async def create_event(event: EventIn, db: Session = Depends(dbm.get_db)):
         frame_timestamp=event.frame_timestamp,
         detail=event.detail,
         status=status,
+        distance_km=event.distance_km,
+        travel_min_minutes=event.travel_min_minutes,
+        travel_max_minutes=event.travel_max_minutes,
+        elapsed_minutes=event.elapsed_minutes,
+        from_camera_id=event.from_camera_id,
     )
     db.add(row)
     db.commit()
@@ -137,12 +147,18 @@ async def create_event(event: EventIn, db: Session = Depends(dbm.get_db)):
         prior = correlation.find_correlation(db, event.plate_text, event.camera_id, row.created_at)
         if prior is not None:
             elapsed_min = correlation.minutes_between(row.created_at, prior.created_at)
+            distance_km, travel_min, travel_max = correlation.predicted_window(prior.camera_id, event.camera_id)
             corr_event = EventIn(
                 camera_id=event.camera_id,
                 event_type=EventType.correlation_match,
                 confidence=min(0.99, (event.confidence + prior.confidence) / 2),
                 plate_text=event.plate_text,
                 detail=f"Vehicle {event.plate_text} spotted at {event.camera_id}, {elapsed_min:.0f} min after {prior.camera_id}",
+                distance_km=distance_km,
+                travel_min_minutes=travel_min,
+                travel_max_minutes=travel_max,
+                elapsed_minutes=elapsed_min,
+                from_camera_id=prior.camera_id,
             )
             await create_event(corr_event, db)
 

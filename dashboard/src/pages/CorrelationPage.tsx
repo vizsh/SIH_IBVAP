@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Radar, Zap } from 'lucide-react'
+import { VideoPane } from '@/components/VideoPane'
 import { BopMap } from '@/components/console/BopMap'
 import { CorrelationDemoTrigger } from '@/components/console/CorrelationBanner'
+import { TransitCorridorGauge } from '@/components/console/TransitCorridorGauge'
 import { GlowingEffect } from '@/components/glowing-effect'
 import { API_BASE } from '@/lib/api'
 import type { IbvapEvent } from '@/types'
@@ -29,20 +31,30 @@ export default function CorrelationPage() {
         <h1 className="text-lg font-semibold text-zinc-100">Cross-BOP Pattern Correlation</h1>
         <p className="mt-1 text-xs text-zinc-500">
           No new hardware — a shared event database keyed by plate text and timestamp. When the same plate is
-          read by two different cameras within a plausible travel-time window, it's flagged automatically
-          (see <code className="rounded bg-zinc-800 px-1 py-0.5">backend/app/correlation.py</code>).
+          read by two different cameras, it's flagged automatically with a real distance-based transit-time
+          prediction (see <code className="rounded bg-zinc-800 px-1 py-0.5">backend/app/correlation.py</code>).
         </p>
       </header>
 
-      <div className="mb-4 h-[340px] overflow-hidden rounded-xl border border-zinc-800">
+      <div className="mb-4 grid grid-cols-2 gap-3">
+        <div className="h-[260px]">
+          <VideoPane cameraId="BOP-Alpha" />
+        </div>
+        <div className="h-[260px]">
+          <VideoPane cameraId="BOP-Bravo" />
+        </div>
+      </div>
+
+      <div className="mb-4 h-[300px] overflow-hidden rounded-xl border border-zinc-800">
         <BopMap events={allEvents} />
       </div>
 
       <div className="mb-4 rounded-xl border border-zinc-800/60 bg-zinc-950/40 p-4 text-xs text-zinc-500">
         To generate a real match: run two edge pipeline processes with different{' '}
-        <code className="rounded bg-zinc-800 px-1 py-0.5">--camera-id</code> values (e.g. BOP-Alpha, BOP-Bravo)
-        against footage containing the same vehicle, per the doc's own "virtual BOPs on one laptop" suggestion
-        (Q23). Every real match below came from that exact mechanism — none are seeded.
+        <code className="rounded bg-zinc-800 px-1 py-0.5">--camera-id</code> / <code className="rounded bg-zinc-800 px-1 py-0.5">--stream-port</code> values
+        (BOP-Alpha on 8092, BOP-Bravo on 8093) against footage containing the same vehicle, per the doc's own
+        "virtual BOPs on one laptop" suggestion (Q23). Every real match below came from that exact mechanism —
+        none are seeded.
       </div>
 
       <div className="space-y-2">
@@ -51,10 +63,11 @@ export default function CorrelationPage() {
             <GlowingEffect disabled={false} glow proximity={70} spread={28} borderWidth={2} />
             <div className="relative z-10 flex items-start gap-3">
               <Zap size={16} className="mt-0.5 shrink-0 text-amber-400" />
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="font-mono text-sm font-semibold text-cyan-300">{m.plate_text}</div>
                 <div className="text-xs text-zinc-400">{m.detail}</div>
                 <div className="mt-1 text-[10px] uppercase tracking-wider text-zinc-600">{timeAgo(m.created_at)}</div>
+                <TransitCorridorGauge event={m} />
               </div>
             </div>
           </div>

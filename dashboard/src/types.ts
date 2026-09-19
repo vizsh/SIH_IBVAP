@@ -25,6 +25,11 @@ export interface IbvapEvent {
   status: EventStatus
   created_at: string
   evidence_url: string | null
+  distance_km: number | null
+  travel_min_minutes: number | null
+  travel_max_minutes: number | null
+  elapsed_minutes: number | null
+  from_camera_id: string | null
 }
 
 export interface AuditEntry {

@@ -31,6 +31,11 @@ class Event(Base):
     detail = Column(String, nullable=True)
     status = Column(String, default="pending")
     evidence_filename = Column(String, nullable=True)
+    distance_km = Column(Float, nullable=True)
+    travel_min_minutes = Column(Float, nullable=True)
+    travel_max_minutes = Column(Float, nullable=True)
+    elapsed_minutes = Column(Float, nullable=True)
+    from_camera_id = Column(String, nullable=True)
     created_at = Column(DateTime, default=utcnow)
 
 

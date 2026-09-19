@@ -11,9 +11,16 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
-from . import db as dbm
+from . import camera_sites, db as dbm
 
-CORRELATION_WINDOW = timedelta(hours=1)  # generous for a demo; production would derive this from road-network travel time
+# Generous enough to catch a real-world-timed match; the *predicted* window
+# shown to the operator is computed separately from real site distance
+# (see predicted_travel_window_minutes) and is usually much narrower — a
+# demo run replays both sightings within minutes regardless of how far
+# apart the real sites are, so gating on the real window would make the
+# demo depend on real-world drive time. The gate stays permissive; the
+# displayed math stays honest.
+CORRELATION_WINDOW = timedelta(hours=6)
 
 
 def find_correlation(db: Session, plate_text: str, camera_id: str, seen_at: datetime) -> dbm.Event | None:
@@ -56,3 +63,9 @@ def minutes_between(a: datetime, b: datetime) -> float:
     a = a if a.tzinfo else a.replace(tzinfo=timezone.utc)
     b = b if b.tzinfo else b.replace(tzinfo=timezone.utc)
     return abs((a - b).total_seconds()) / 60.0
+
+
+def predicted_window(camera_a: str, camera_b: str) -> tuple[float, float, float]:
+    """Real distance-based prediction (see camera_sites.py) — exposed here
+    so main.py doesn't need to import camera_sites directly."""
+    return camera_sites.predicted_travel_window_minutes(camera_a, camera_b)
