@@ -19,6 +19,7 @@ const EVENT_LABELS: Record<string, string> = {
   vehicle_detected: 'Vehicle detected',
   person_detected: 'Person detected',
   anpr_read: 'ANPR read',
+  correlation_match: 'Cross-BOP correlation',
 }
 
 function timeAgo(iso: string): string {

@@ -2,18 +2,20 @@ import { Zap } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface CorrelationMatch {
-  plate: string
-  fromCamera: string
-  toCamera: string
-  minutesApart: number
+  plateText: string | null
+  detail: string | null
 }
 
 /**
  * Cross-BOP pattern correlation (reference doc Section 16.1 / Feature 4):
- * no new hardware, just a shared event DB keyed by plate hash + timestamp
+ * no new hardware, just a shared event DB keyed by plate text + timestamp
  * across BOP edge nodes, flagged when a travel-time window is plausible.
  * This banner is the UI moment for that match — a full-width flash, not a
  * corner toast, since it's meant to interrupt the operator's attention.
+ *
+ * Takes the real correlation_match event's own fields (plate_text, detail)
+ * rather than a bespoke shape, so there's no string-parsing between what
+ * the backend actually computed and what gets rendered.
  */
 export function fireCorrelationAlert(match: CorrelationMatch) {
   toast.custom(
@@ -25,9 +27,10 @@ export function fireCorrelationAlert(match: CorrelationMatch) {
             Correlated pattern match
           </div>
           <div className="mt-0.5 truncate text-sm text-zinc-200">
-            Vehicle <span className="font-mono font-semibold text-cyan-300">{match.plate}</span> spotted at{' '}
-            <span className="text-zinc-100">{match.toCamera}</span>, {match.minutesApart} min after{' '}
-            <span className="text-zinc-100">{match.fromCamera}</span>
+            {match.plateText && (
+              <span className="mr-1 font-mono font-semibold text-cyan-300">{match.plateText}</span>
+            )}
+            {match.detail}
           </div>
         </div>
       </div>
@@ -37,10 +40,8 @@ export function fireCorrelationAlert(match: CorrelationMatch) {
 }
 
 const DEMO_MATCH: CorrelationMatch = {
-  plate: 'HR26AB1234',
-  fromCamera: 'BOP-Alpha (Panitanki)',
-  toCamera: 'BOP-Bravo (Raxaul)',
-  minutesApart: 14,
+  plateText: 'HR26AB1234',
+  detail: 'spotted at BOP-Bravo (Raxaul), 14 min after BOP-Alpha (Panitanki) — demo trigger, not a real match',
 }
 
 export function CorrelationDemoTrigger() {
@@ -49,7 +50,7 @@ export function CorrelationDemoTrigger() {
       onClick={() => fireCorrelationAlert(DEMO_MATCH)}
       className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-300 hover:bg-amber-500/20"
     >
-      <Zap size={13} /> Simulate correlation match
+      <Zap size={13} /> Simulate correlation match (demo)
     </button>
   )
 }

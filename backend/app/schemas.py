@@ -11,6 +11,7 @@ class EventType(str, Enum):
     vehicle_detected = "vehicle_detected"
     person_detected = "person_detected"
     anpr_read = "anpr_read"
+    correlation_match = "correlation_match"
 
 
 class ConfidenceTier(str, Enum):

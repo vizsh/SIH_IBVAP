@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import Particles from '@/components/Particles'
 import { Toaster } from '@/components/ui/sonner'
+import { useCorrelationWatcher } from '@/hooks/useCorrelationWatcher'
 
 const NAV_ITEMS = [
   { to: '/console', label: 'Command Console', icon: LayoutGrid },
@@ -13,6 +14,8 @@ const NAV_ITEMS = [
 ]
 
 export function SiteShell() {
+  useCorrelationWatcher()
+
   return (
     <div className="relative min-h-screen bg-[#05070C] text-zinc-200">
       <div className="pointer-events-none fixed inset-0 z-0 opacity-40">

@@ -7,6 +7,7 @@ export type EventType =
   | 'vehicle_detected'
   | 'person_detected'
   | 'anpr_read'
+  | 'correlation_match'
 
 export interface IbvapEvent {
   id: number

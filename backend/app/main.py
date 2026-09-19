@@ -7,7 +7,7 @@ from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconn
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
-from . import audit, confidence, db as dbm
+from . import audit, confidence, correlation, db as dbm
 from .schemas import EventIn, EventOut, EventType, ReviewAction, TelemetryIn
 from .ws_manager import manager
 
@@ -91,6 +91,20 @@ async def create_event(event: EventIn, db: Session = Depends(dbm.get_db)):
         created_at=row.created_at,
     )
     await manager.broadcast({"type": "event", "data": out.model_dump(mode="json")})
+
+    if event.event_type == EventType.anpr_read and event.plate_text:
+        prior = correlation.find_correlation(db, event.plate_text, event.camera_id, row.created_at)
+        if prior is not None:
+            elapsed_min = correlation.minutes_between(row.created_at, prior.created_at)
+            corr_event = EventIn(
+                camera_id=event.camera_id,
+                event_type=EventType.correlation_match,
+                confidence=min(0.99, (event.confidence + prior.confidence) / 2),
+                plate_text=event.plate_text,
+                detail=f"Vehicle {event.plate_text} spotted at {event.camera_id}, {elapsed_min:.0f} min after {prior.camera_id}",
+            )
+            await create_event(corr_event, db)
+
     return out
 
 

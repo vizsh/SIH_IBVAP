@@ -10,6 +10,7 @@ const EVENT_LABELS: Record<string, string> = {
   vehicle_detected: 'Vehicle',
   person_detected: 'Person',
   anpr_read: 'ANPR',
+  correlation_match: 'Correlation',
 }
 
 const typeChartConfig: ChartConfig = {
