@@ -69,6 +69,7 @@ def health():
 @app.post("/telemetry")
 async def post_telemetry(telemetry: TelemetryIn):
     payload = telemetry.model_dump()
+    payload["received_at"] = time.time()  # server-stamped, so staleness is computable regardless of client clocks
     latest_telemetry[telemetry.camera_id] = payload
     await manager.broadcast({"type": "telemetry", "data": payload})
     return {"ok": True}
@@ -77,6 +78,14 @@ async def post_telemetry(telemetry: TelemetryIn):
 @app.get("/telemetry/{camera_id}")
 def get_telemetry(camera_id: str):
     return latest_telemetry.get(camera_id)
+
+
+@app.get("/telemetry")
+def get_all_telemetry():
+    """Every camera's last-known telemetry, for the coverage map's live/idle
+    status — a camera counts as LIVE only if it reported within the last
+    few seconds, not just because it has ever reported at all."""
+    return latest_telemetry
 
 
 @app.post("/events", response_model=EventOut)

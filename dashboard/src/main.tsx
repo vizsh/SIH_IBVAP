@@ -7,6 +7,7 @@ import AnalyticsPage from './pages/AnalyticsPage'
 import AuditLogPage from './pages/AuditLogPage'
 import ConsolePage from './pages/ConsolePage'
 import CorrelationPage from './pages/CorrelationPage'
+import CoveragePage from './pages/CoveragePage'
 import LandingPage from './pages/LandingPage'
 import LiveFeedsPage from './pages/LiveFeedsPage'
 import LoginPage from './pages/LoginPage'
@@ -19,6 +20,7 @@ createRoot(document.getElementById('root')!).render(
         <Route path="/login" element={<LoginPage />} />
         <Route element={<SiteShell />}>
           <Route path="/console" element={<ConsolePage />} />
+          <Route path="/coverage" element={<CoveragePage />} />
           <Route path="/live" element={<LiveFeedsPage />} />
           <Route path="/correlation" element={<CorrelationPage />} />
           <Route path="/audit" element={<AuditLogPage />} />

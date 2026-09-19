@@ -144,3 +144,44 @@ body {
     @apply font-sans;
   }
 }
+
+/* Radar-ping animation for a genuinely live camera marker on the coverage
+   map — a real signal ("this pipeline reported telemetry in the last few
+   seconds"), not decoration applied to every marker regardless of state. */
+@keyframes radar-ping {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+.radar-marker {
+  position: relative;
+  width: 16px;
+  height: 16px;
+}
+.radar-marker__dot {
+  position: absolute;
+  inset: 4px;
+  border-radius: 9999px;
+  background: var(--radar-color, #10b981);
+  box-shadow: 0 0 8px var(--radar-color, #10b981);
+}
+.radar-marker__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 2px solid var(--radar-color, #10b981);
+  animation: radar-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* react-leaflet's TileLayer doesn't forward `className` to the actual tile
+   DOM (Leaflet renders tiles outside React's tree entirely) — so the dark
+   theme has to be applied as a global rule scoped to this wrapper class on
+   MapContainer instead, targeting Leaflet's own pane class directly. */
+.tactical-map .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9);
+}

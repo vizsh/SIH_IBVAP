@@ -7,8 +7,10 @@ import type { IbvapEvent } from '@/types'
 const TIER_RANK = { high: 3, medium: 2, low: 1 } as const
 const TIER_COLOR = { high: '#ef4444', medium: '#f59e0b', low: '#10b981' } as const
 
-// Free, no-API-key dark tile layer (CARTO's Dark Matter, OSM-derived data).
-const DARK_TILES = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+// Plain OpenStreetMap tiles — never require an API key. CARTO's dark-tile
+// endpoint does now (shows an "API KEY REQUIRED" watermark without one),
+// so the dark theme is faked with a CSS filter on the tile layer instead.
+const OSM_TILES = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
 
 /**
  * Real spatial view: every camera that has actually logged an event this
@@ -53,8 +55,8 @@ export function BopMap({ events }: { events: IbvapEvent[] }) {
   const center: [number, number] = [cameras[0].site.lat, cameras[0].site.lng]
 
   return (
-    <MapContainer center={center} zoom={7} className="h-full w-full" style={{ background: '#0a0c10' }}>
-      <TileLayer url={DARK_TILES} attribution="&copy; OpenStreetMap &copy; CARTO" />
+    <MapContainer center={center} zoom={7} className="tactical-map h-full w-full" style={{ background: '#0a0c10' }}>
+      <TileLayer url={OSM_TILES} attribution="&copy; OpenStreetMap contributors" />
       {correlationLines.map((line) => (
         <Polyline
           key={line.id}
