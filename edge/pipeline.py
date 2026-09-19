@@ -54,6 +54,7 @@ def parse_args():
     p.add_argument("--zone", default=None, help="virtual-fence polygon as x1,y1;x2,y2;... in 0-1 normalized coords")
     p.add_argument("--max-seconds", type=float, default=None, help="stop after N seconds (for scripted test runs)")
     p.add_argument("--stream-port", type=int, default=8091, help="MJPEG preview stream port (0 to disable)")
+    p.add_argument("--loop", action="store_true", help="seek back to frame 0 at end of file instead of stopping — makes a video file behave like a continuous live feed")
     return p.parse_args()
 
 
@@ -225,7 +226,13 @@ def main():
         t_capture = time.time()
         ret, frame = cap.read()
         if not ret:
-            break
+            if args.loop:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                ret, frame = cap.read()
+                if not ret:
+                    break
+            else:
+                break
         frame_count += 1
         now = time.time()
 
