@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Camera } from 'lucide-react'
 import { EvidenceThumbnail } from '@/components/console/EvidenceThumbnail'
+import { MultiSensorOscilloscope } from '@/components/console/MultiSensorOscilloscope'
 import { VideoPane } from '@/components/VideoPane'
 import { GlowingEffect } from '@/components/glowing-effect'
 import { API_BASE } from '@/lib/api'
@@ -44,6 +45,10 @@ export default function LiveFeedsPage() {
 
       <div className="mb-6 h-[420px]">
         <VideoPane cameraId="BOP-01" />
+      </div>
+
+      <div className="mb-6">
+        <MultiSensorOscilloscope cameraId="BOP-01" />
       </div>
 
       <div className="mb-3 flex items-center gap-2">
