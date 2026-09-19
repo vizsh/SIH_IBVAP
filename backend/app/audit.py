@@ -34,12 +34,19 @@ def append_entry(db: Session, action: str, detail: str, event_id: int | None = N
 
 
 def verify_chain(db: Session) -> bool:
+    return verify_chain_detailed(db)[0]
+
+
+def verify_chain_detailed(db: Session) -> tuple[bool, int | None]:
+    """Same recomputation as verify_chain, but also reports which block id
+    is the first one whose stored hash no longer matches what it should be
+    — the actual block a tamper attempt touched, not just a boolean."""
     entries = db.query(dbm.AuditEntry).order_by(dbm.AuditEntry.id.asc()).all()
     prev_hash = GENESIS_HASH
     for e in entries:
         payload = f"{e.action}|{e.detail}|{e.event_id}"
         expected = _hash(prev_hash, payload)
         if expected != e.entry_hash or e.prev_hash != prev_hash:
-            return False
+            return False, e.id
         prev_hash = e.entry_hash
-    return True
+    return True, None

@@ -36,6 +36,22 @@ app.add_middleware(
 )
 
 
+async def _broadcast_audit(entry: dbm.AuditEntry) -> None:
+    await manager.broadcast(
+        {
+            "type": "audit",
+            "data": {
+                "id": entry.id,
+                "event_id": entry.event_id,
+                "action": entry.action,
+                "entry_hash": entry.entry_hash,
+                "prev_hash": entry.prev_hash,
+                "created_at": entry.created_at.isoformat(),
+            },
+        }
+    )
+
+
 def _event_out(row: dbm.Event) -> EventOut:
     return EventOut(
         id=row.id,
@@ -111,7 +127,8 @@ async def create_event(event: EventIn, db: Session = Depends(dbm.get_db)):
     db.commit()
     db.refresh(row)
 
-    audit.append_entry(db, action="event_created", detail=f"{event.event_type.value}@{event.camera_id}", event_id=row.id)
+    audit_entry = audit.append_entry(db, action="event_created", detail=f"{event.event_type.value}@{event.camera_id}", event_id=row.id)
+    await _broadcast_audit(audit_entry)
 
     out = _event_out(row)
     await manager.broadcast({"type": "event", "data": out.model_dump(mode="json")})
@@ -166,7 +183,8 @@ async def review_event(event_id: int, action: ReviewAction, db: Session = Depend
     row.status = "confirmed" if action.action == "confirm" else "dismissed"
     db.commit()
 
-    audit.append_entry(db, action=f"event_{action.action}", detail=f"reviewer action on event {event_id}", event_id=event_id)
+    audit_entry = audit.append_entry(db, action=f"event_{action.action}", detail=f"reviewer action on event {event_id}", event_id=event_id)
+    await _broadcast_audit(audit_entry)
 
     await manager.broadcast({"type": "event_updated", "data": {"id": event_id, "status": row.status}})
     return {"id": event_id, "status": row.status}
@@ -180,8 +198,25 @@ def get_audit(db: Session = Depends(dbm.get_db), limit: int = 200):
 
 @app.get("/audit/verify")
 def audit_verify(db: Session = Depends(dbm.get_db)):
-    ok = audit.verify_chain(db)
-    return {"valid": ok}
+    ok, broken_block_id = audit.verify_chain_detailed(db)
+    return {"valid": ok, "broken_block_id": broken_block_id}
+
+
+@app.post("/audit/demo/tamper")
+def audit_demo_tamper(db: Session = Depends(dbm.get_db)):
+    """Demo-only: deliberately corrupts the oldest untampered audit entry's
+    detail field, breaking the hash chain from that block forward — proving
+    tamper-evidence live rather than just asserting it. Never called by the
+    edge pipeline or any real code path; exists purely for the UI's
+    'Simulate Log Modification' button."""
+    entries = db.query(dbm.AuditEntry).order_by(dbm.AuditEntry.id.asc()).all()
+    target = next((e for e in entries if "[TAMPERED]" not in e.detail), None)
+    if target is None:
+        raise HTTPException(status_code=400, detail="no untampered entry left to demonstrate on — restart the backend for a fresh chain")
+
+    target.detail = f"{target.detail} [TAMPERED]"
+    db.commit()
+    return {"tampered_block_id": target.id}
 
 
 @app.websocket("/ws")

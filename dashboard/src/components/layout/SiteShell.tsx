@@ -2,6 +2,7 @@ import { Activity, FileTerminal, Globe, LayoutGrid, Radar, ShieldAlert, Video } 
 import { NavLink, Outlet } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import Particles from '@/components/Particles'
+import { AuditTerminalWidget } from '@/components/console/AuditTerminalWidget'
 import { Toaster } from '@/components/ui/sonner'
 import { useCorrelationWatcher } from '@/hooks/useCorrelationWatcher'
 
@@ -66,6 +67,7 @@ export function SiteShell() {
       </div>
 
       <Toaster position="top-center" />
+      <AuditTerminalWidget />
     </div>
   )
 }
