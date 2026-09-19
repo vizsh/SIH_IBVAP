@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis } from 'recharts'
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart'
+import { API_BASE } from '@/lib/api'
 import type { IbvapEvent } from '@/types'
 
 const EVENT_LABELS: Record<string, string> = {
@@ -26,7 +27,7 @@ export default function AnalyticsPage() {
   const [events, setEvents] = useState<IbvapEvent[]>([])
 
   useEffect(() => {
-    fetch('/api/events?limit=500')
+    fetch(`${API_BASE}/events?limit=500`)
       .then((r) => r.json())
       .then(setEvents)
       .catch(() => {})

@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: ibvap-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: IBVAP_DEMO_MODE
+        value: "1"

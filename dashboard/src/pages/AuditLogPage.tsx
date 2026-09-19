@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { CheckCircle2, ShieldAlert, XCircle } from 'lucide-react'
+import { API_BASE } from '@/lib/api'
 import type { AuditEntry } from '@/types'
 
 async function fetchAudit(): Promise<AuditEntry[]> {
-  const res = await fetch('/api/audit?limit=200')
+  const res = await fetch(`${API_BASE}/audit?limit=200`)
   if (!res.ok) throw new Error('failed to fetch audit log')
   return res.json()
 }
 
 async function verifyChain(): Promise<boolean> {
-  const res = await fetch('/api/audit/verify')
+  const res = await fetch(`${API_BASE}/audit/verify`)
   const data = await res.json()
   return data.valid
 }

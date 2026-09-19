@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Lock } from 'lucide-react'
+import { API_BASE } from '@/lib/api'
 import type { AuditEntry } from '@/types'
 
 export function AuditPreviewCard() {
   const [entries, setEntries] = useState<AuditEntry[]>([])
 
   useEffect(() => {
-    fetch('/api/audit?limit=3')
+    fetch(`${API_BASE}/audit?limit=3`)
       .then((r) => r.json())
       .then(setEntries)
       .catch(() => {})
