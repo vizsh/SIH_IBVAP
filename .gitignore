@@ -1,0 +1,21 @@
+# backend
+backend/venv/
+backend/__pycache__/
+backend/app/__pycache__/
+backend/*.db
+
+# frontend
+dashboard/node_modules/
+dashboard/dist/
+
+# edge / CV pipeline
+edge/venv/
+edge/__pycache__/
+edge/*.pt
+edge/*.jpg
+edge/EasyOCR/
+
+# misc
+demo_assets/*.mp4
+.DS_Store
+*.log
