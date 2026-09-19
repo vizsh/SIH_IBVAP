@@ -56,6 +56,23 @@ def default_zone(width: int, height: int) -> np.ndarray:
     return np.array([[int(x * width), int(y * height)] for x, y in pts])
 
 
+def fetch_configured_fence(backend_url: str, camera_id: str) -> list[list[float]] | None:
+    # Per-camera geofence set from the dashboard's Zone Configuration page
+    # (Section: "per-camera virtual-fence configuration" roadmap item) —
+    # the edge pipeline is the actual consumer of that config, not just a
+    # UI that saves and does nothing. Best-effort: a dead/unreachable
+    # backend at startup falls back to --zone or the hardcoded default.
+    fence_url = backend_url.replace("/events", f"/cameras/{camera_id}/fence")
+    try:
+        resp = requests.get(fence_url, timeout=2.0)
+        resp.raise_for_status()
+        data = resp.json()
+        return data["polygon"] if data else None
+    except Exception as e:
+        print(f"[warn] could not fetch configured fence for {camera_id}: {e}")
+        return None
+
+
 def post_event(backend_url: str, **kwargs) -> dict | None:
     # A malformed payload or a dead backend must never take the detection
     # loop down with it — this is best-effort telemetry, not the pipeline's
@@ -98,11 +115,17 @@ def main():
         raise SystemExit("could not read first frame from source")
     h, w = first_frame.shape[:2]
 
+    configured_fence = None if args.zone else fetch_configured_fence(args.backend, args.camera_id)
     if args.zone:
         pts = [tuple(map(float, pair.split(','))) for pair in args.zone.split(';')]
         polygon = np.array([[int(x * w), int(y * h)] for x, y in pts])
+        print(f"[edge] using --zone override ({len(pts)} points)")
+    elif configured_fence:
+        polygon = np.array([[int(x * w), int(y * h)] for x, y in configured_fence])
+        print(f"[edge] using dashboard-configured fence for {args.camera_id} ({len(configured_fence)} points)")
     else:
         polygon = default_zone(w, h)
+        print(f"[edge] no configured fence for {args.camera_id} — using default placeholder zone")
 
     zone = sv.PolygonZone(polygon=polygon)
     zone_annotator = sv.PolygonZoneAnnotator(zone=zone, color=sv.Color.from_hex("#22d3ee"))

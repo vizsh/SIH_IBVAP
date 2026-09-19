@@ -31,6 +31,29 @@ export async function reviewEvent(id: number, action: 'confirm' | 'dismiss', rea
   return res.json()
 }
 
+export interface CameraFence {
+  camera_id: string
+  polygon: [number, number][]
+  updated_at: string
+}
+
+export async function fetchFence(cameraId: string): Promise<CameraFence | null> {
+  const res = await fetch(`${API_BASE}/cameras/${cameraId}/fence`)
+  if (!res.ok) throw new Error('failed to fetch fence')
+  const body = await res.json()
+  return body ?? null
+}
+
+export async function saveFence(cameraId: string, polygon: [number, number][]): Promise<CameraFence> {
+  const res = await fetch(`${API_BASE}/cameras/${cameraId}/fence`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ polygon }),
+  })
+  if (!res.ok) throw new Error('failed to save fence')
+  return res.json()
+}
+
 export function wsUrl(): string {
   if (API_ORIGIN) {
     const proto = API_ORIGIN.startsWith('https') ? 'wss' : 'ws'

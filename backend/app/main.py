@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from . import audit, confidence, correlation, db as dbm
-from .schemas import EventIn, EventOut, EventType, ReviewAction, TelemetryIn
+from .schemas import EventIn, EventOut, EventType, FenceIn, FenceOut, ReviewAction, TelemetryIn
 from .ws_manager import manager
 
 app = FastAPI(title="IBVAP Backend", version="0.1.0")
@@ -210,6 +210,38 @@ async def review_event(event_id: int, action: ReviewAction, db: Session = Depend
 
     await manager.broadcast({"type": "event_updated", "data": {"id": event_id, "status": row.status, "reason": action.reason}})
     return {"id": event_id, "status": row.status}
+
+
+@app.get("/cameras/fences", response_model=list[FenceOut])
+def list_fences(db: Session = Depends(dbm.get_db)):
+    rows = db.query(dbm.CameraFence).all()
+    return [FenceOut(camera_id=r.camera_id, polygon=json.loads(r.polygon_json), updated_at=r.updated_at) for r in rows]
+
+
+@app.get("/cameras/{camera_id}/fence", response_model=FenceOut | None)
+def get_fence(camera_id: str, db: Session = Depends(dbm.get_db)):
+    row = db.query(dbm.CameraFence).filter(dbm.CameraFence.camera_id == camera_id).first()
+    if not row:
+        return None
+    return FenceOut(camera_id=row.camera_id, polygon=json.loads(row.polygon_json), updated_at=row.updated_at)
+
+
+@app.put("/cameras/{camera_id}/fence", response_model=FenceOut)
+async def set_fence(camera_id: str, fence: FenceIn, db: Session = Depends(dbm.get_db)):
+    row = db.query(dbm.CameraFence).filter(dbm.CameraFence.camera_id == camera_id).first()
+    if row:
+        row.polygon_json = json.dumps(fence.polygon)
+    else:
+        row = dbm.CameraFence(camera_id=camera_id, polygon_json=json.dumps(fence.polygon))
+        db.add(row)
+    db.commit()
+    db.refresh(row)
+
+    audit_entry = audit.append_entry(db, action="fence_configured", detail=f"{camera_id} fence set to {len(fence.polygon)}-point polygon")
+    await _broadcast_audit(audit_entry)
+    await manager.broadcast({"type": "fence_updated", "data": {"camera_id": camera_id, "polygon": fence.polygon}})
+
+    return FenceOut(camera_id=row.camera_id, polygon=fence.polygon, updated_at=row.updated_at)
 
 
 @app.get("/audit")

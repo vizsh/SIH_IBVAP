@@ -11,6 +11,7 @@ import CoveragePage from './pages/CoveragePage'
 import LandingPage from './pages/LandingPage'
 import LiveFeedsPage from './pages/LiveFeedsPage'
 import LoginPage from './pages/LoginPage'
+import ZoneConfigPage from './pages/ZoneConfigPage'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -25,6 +26,7 @@ createRoot(document.getElementById('root')!).render(
           <Route path="/correlation" element={<CorrelationPage />} />
           <Route path="/audit" element={<AuditLogPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
+          <Route path="/zone-config" element={<ZoneConfigPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

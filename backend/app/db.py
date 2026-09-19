@@ -40,6 +40,14 @@ class Event(Base):
     created_at = Column(DateTime, default=utcnow)
 
 
+class CameraFence(Base):
+    __tablename__ = "camera_fences"
+
+    camera_id = Column(String, primary_key=True)
+    polygon_json = Column(String, nullable=False)  # JSON-encoded list[[x, y]], normalized 0-1
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
+
+
 class AuditEntry(Base):
     __tablename__ = "audit_log"
 

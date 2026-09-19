@@ -1,4 +1,4 @@
-import { Activity, FileTerminal, Globe, LayoutGrid, Radar, ShieldAlert, Video } from 'lucide-react'
+import { Activity, FileTerminal, Globe, LayoutGrid, Radar, ShieldAlert, Video, Waypoints } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import Particles from '@/components/Particles'
@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { to: '/console', label: 'Command Console', icon: LayoutGrid },
   { to: '/coverage', label: 'Border Coverage', icon: Globe },
   { to: '/live', label: 'Live Feeds & HUD', icon: Video },
+  { to: '/zone-config', label: 'Zone Configuration', icon: Waypoints },
   { to: '/correlation', label: 'Cross-BOP Correlation', icon: Radar },
   { to: '/audit', label: 'Security Audit Log', icon: FileTerminal },
   { to: '/analytics', label: 'Analytics & Health', icon: Activity },

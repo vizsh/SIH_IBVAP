@@ -77,6 +77,24 @@ class TelemetryIn(BaseModel):
     zone_polygon: list[list[float]]  # [[x, y], ...] normalized 0-1 image-plane coords
 
 
+class FenceIn(BaseModel):
+    """A camera's virtual-fence polygon, drawn by an operator in the
+    dashboard's Zone Configuration page — normalized 0-1 image-plane
+    coordinates, same convention as TelemetryIn.zone_polygon, so the edge
+    pipeline can scale it to whatever resolution that camera actually runs
+    at."""
+
+    polygon: list[list[float]] = Field(min_length=3)
+
+
+class FenceOut(FenceIn):
+    camera_id: str
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class AuditEntryOut(BaseModel):
     id: int
     event_id: Optional[int]
