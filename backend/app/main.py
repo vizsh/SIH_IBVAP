@@ -8,10 +8,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from . import audit, confidence, db as dbm
-from .schemas import EventIn, EventOut, EventType, ReviewAction
+from .schemas import EventIn, EventOut, EventType, ReviewAction, TelemetryIn
 from .ws_manager import manager
 
 app = FastAPI(title="IBVAP Backend", version="0.1.0")
+
+# Latest telemetry per camera, in-memory only — this is live HUD state, not
+# an auditable record, so it doesn't belong in the events/audit tables.
+latest_telemetry: dict[str, dict] = {}
 
 app.add_middleware(
     CORSMiddleware,
@@ -30,6 +34,19 @@ def on_startup() -> None:
 @app.get("/health")
 def health():
     return {"status": "ok", "time": time.time()}
+
+
+@app.post("/telemetry")
+async def post_telemetry(telemetry: TelemetryIn):
+    payload = telemetry.model_dump()
+    latest_telemetry[telemetry.camera_id] = payload
+    await manager.broadcast({"type": "telemetry", "data": payload})
+    return {"ok": True}
+
+
+@app.get("/telemetry/{camera_id}")
+def get_telemetry(camera_id: str):
+    return latest_telemetry.get(camera_id)
 
 
 @app.post("/events", response_model=EventOut)

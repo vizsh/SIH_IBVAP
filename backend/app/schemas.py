@@ -48,6 +48,17 @@ class ReviewAction(BaseModel):
     action: str  # "confirm" | "dismiss"
 
 
+class TelemetryIn(BaseModel):
+    """Live edge-box telemetry, pushed by the pipeline every ~second — the
+    numbers the video-pane HUD overlay actually displays, not decoration."""
+
+    camera_id: str
+    fps: float
+    latency_ms: float
+    active_tracks: int
+    zone_polygon: list[list[float]]  # [[x, y], ...] normalized 0-1 image-plane coords
+
+
 class AuditEntryOut(BaseModel):
     id: int
     event_id: Optional[int]

@@ -4,16 +4,18 @@ import Crosshair from '@/components/Crosshair'
 import { AnprVotingCard } from '@/components/console/AnprVotingCard'
 import { TacticalOverlay } from '@/components/console/TacticalOverlay'
 import { useEdgeStream } from '@/hooks/useEdgeStream'
+import { useTelemetry } from '@/hooks/useTelemetry'
 
-export function VideoPane() {
+export function VideoPane({ cameraId = 'BOP-01' }: { cameraId?: string }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [showAnpr, setShowAnpr] = useState(false)
   const stream = useEdgeStream()
+  const telemetry = useTelemetry(cameraId)
 
   return (
     <div className="flex h-full flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900/40">
       <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3 text-sm font-semibold text-zinc-300">
-        Camera feed — BOP-01
+        Camera feed — {cameraId}
         <div className="flex items-center gap-2">
           <span
             className={
@@ -53,7 +55,7 @@ export function VideoPane() {
           </div>
         )}
 
-        <TacticalOverlay />
+        <TacticalOverlay cameraId={cameraId} telemetry={telemetry} />
         <Crosshair color="rgba(34,211,238,0.5)" containerRef={containerRef} />
 
         {showAnpr && (

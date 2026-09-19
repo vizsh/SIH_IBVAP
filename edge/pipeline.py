@@ -14,6 +14,7 @@ just accumulating total time visible on camera.
 
 import argparse
 import time
+from collections import deque
 
 import cv2
 import numpy as np
@@ -91,6 +92,7 @@ def main():
 
     zone = sv.PolygonZone(polygon=polygon)
     zone_annotator = sv.PolygonZoneAnnotator(zone=zone, color=sv.Color.from_hex("#22d3ee"))
+    zone_polygon_norm = [[x / w, y / h] for x, y in polygon.tolist()]
 
     broadcaster = FrameBroadcaster()
     if args.stream_port:
@@ -109,6 +111,8 @@ def main():
 
     start = time.time()
     frame_count = 0
+    frame_times: deque[float] = deque(maxlen=30)  # rolling window for a real FPS reading
+    last_telemetry_push = 0.0
 
     print(f"[edge] source={args.source} camera_id={args.camera_id} backend={args.backend}")
     print(f"[edge] zone polygon (px): {polygon.tolist()}")
@@ -240,6 +244,20 @@ def main():
 
         t_done = time.time()
         latency_ms = (t_done - t_capture) * 1000
+        frame_times.append(t_done)
+        rolling_fps = (len(frame_times) - 1) / (frame_times[-1] - frame_times[0]) if len(frame_times) > 1 else 0.0
+
+        if t_done - last_telemetry_push >= 1.0:
+            last_telemetry_push = t_done
+            post_event(
+                args.backend.replace("/events", "/telemetry"),
+                camera_id=args.camera_id,
+                fps=round(rolling_fps, 1),
+                latency_ms=round(latency_ms, 1),
+                active_tracks=len(detections),
+                zone_polygon=zone_polygon_norm,
+            )
+
         cv2.putText(
             annotated,
             f"frame {frame_count} | detect+track {(t_detect - t_capture) * 1000:.0f}ms | e2e {latency_ms:.0f}ms",
