@@ -76,6 +76,14 @@ class TelemetryIn(BaseModel):
     active_tracks: int
     zone_polygon: list[list[float]]  # [[x, y], ...] normalized 0-1 image-plane coords
 
+    # Real YOLOv8n-pose output per tracked person, not a generative overlay:
+    # 17 COCO keypoints (normalized 0-1, [x, y, confidence] each), a behavior
+    # tag derived from measured joint-angle geometry (never guessed), and a
+    # heading/speed computed from that track's own recent centroid history.
+    # speed_px_s is frame-space pixels/sec, not a fabricated real-world
+    # m/s — no camera calibration exists to make that conversion honest.
+    poses: Optional[list[dict]] = None
+
 
 class FenceIn(BaseModel):
     """A camera's virtual-fence polygon, drawn by an operator in the

@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { Camera, ScanLine } from 'lucide-react'
 import Crosshair from '@/components/Crosshair'
 import { AnprVotingCard } from '@/components/console/AnprVotingCard'
+import { PoseOverlay } from '@/components/console/PoseOverlay'
 import { TacticalOverlay } from '@/components/console/TacticalOverlay'
 import { useEdgeStream } from '@/hooks/useEdgeStream'
 import { useTelemetry } from '@/hooks/useTelemetry'
@@ -58,6 +59,7 @@ export function VideoPane({ cameraId = 'BOP-01' }: { cameraId?: string }) {
         )}
 
         <TacticalOverlay cameraId={cameraId} telemetry={telemetry} />
+        <PoseOverlay poses={telemetry?.poses} />
         <Crosshair color="rgba(34,211,238,0.5)" containerRef={containerRef} />
 
         {showAnpr && (

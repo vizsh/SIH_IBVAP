@@ -1,12 +1,21 @@
 import { useEffect, useState } from 'react'
 import { API_BASE, wsUrl } from '../lib/api'
 
+export interface PoseData {
+  track_id: number
+  keypoints: [number, number, number][] // 17 COCO joints, normalized [x, y, confidence]
+  behavior: string | null
+  heading_deg: number | null
+  speed_px_s: number | null
+}
+
 export interface Telemetry {
   camera_id: string
   fps: number
   latency_ms: number
   active_tracks: number
   zone_polygon: [number, number][]
+  poses?: PoseData[]
 }
 
 /**

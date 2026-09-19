@@ -30,6 +30,12 @@ PERSON_CLASS = 0
 VEHICLE_CLASSES = {2, 5, 7}  # car, bus, truck
 TRACKED_CLASSES = {PERSON_CLASS, *VEHICLE_CLASSES}
 
+# COCO-17 keypoint indices (Ultralytics YOLOv8-pose's own output order)
+KP_L_SHOULDER, KP_R_SHOULDER = 5, 6
+KP_L_HIP, KP_R_HIP = 11, 12
+KP_L_KNEE, KP_R_KNEE = 13, 14
+KP_MIN_CONF = 0.3  # below this, a joint is "not visible enough" — never guessed
+
 INTRUSION_CONFIRM_SECONDS = 0.6  # doc: n~=3 frames @ 5fps
 LOITER_THRESHOLD_SECONDS = 20.0  # demo value; production default is 90s (doc Section 4)
 LOITER_RESET_FRACTION = 0.15  # centroid drift past this fraction of frame width resets the loiter clock
@@ -41,6 +47,8 @@ def parse_args():
     p.add_argument("--camera-id", default="BOP-01")
     p.add_argument("--backend", default="http://127.0.0.1:8000/events")
     p.add_argument("--model", default="yolov8n.pt")
+    p.add_argument("--pose-model", default="yolov8n-pose.pt", help="set to empty string to disable pose/skeleton estimation")
+    p.add_argument("--pose-every-n-frames", type=int, default=2, help="throttle: pose inference is heavier than detection")
     p.add_argument("--show", action="store_true", help="open a live cv2 window")
     p.add_argument("--save-frame", default="latest_frame.jpg", help="continuously write the annotated frame here for remote inspection")
     p.add_argument("--zone", default=None, help="virtual-fence polygon as x1,y1;x2,y2;... in 0-1 normalized coords")
@@ -73,6 +81,46 @@ def fetch_configured_fence(backend_url: str, camera_id: str) -> list[list[float]
         return None
 
 
+def iou(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> float:
+    ax1, ay1, ax2, ay2 = a
+    bx1, by1, bx2, by2 = b
+    ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+    ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+    inter = max(0.0, ix2 - ix1) * max(0.0, iy2 - iy1)
+    area_a = max(0.0, ax2 - ax1) * max(0.0, ay2 - ay1)
+    area_b = max(0.0, bx2 - bx1) * max(0.0, by2 - by1)
+    union = area_a + area_b - inter
+    return inter / union if union > 0 else 0.0
+
+
+def classify_posture(keypoints: np.ndarray) -> str | None:
+    # Geometric, deterministic, and explainable (CLAUDE.md's own rule: measured
+    # features, never a generative guess). A standing person's hips sit roughly
+    # midway between shoulders and knees; a squat/crawl collapses that gap —
+    # the upper-leg (hip->knee) span shrinks relative to the torso (shoulder->hip)
+    # span. All four joints must clear KP_MIN_CONF or this returns None rather
+    # than tag off partial/occluded keypoints.
+    ls, rs = keypoints[KP_L_SHOULDER], keypoints[KP_R_SHOULDER]
+    lh, rh = keypoints[KP_L_HIP], keypoints[KP_R_HIP]
+    lk, rk = keypoints[KP_L_KNEE], keypoints[KP_R_KNEE]
+    joints = [ls, rs, lh, rh, lk, rk]
+    if any(j[2] < KP_MIN_CONF for j in joints):
+        return None
+
+    shoulder_y = (ls[1] + rs[1]) / 2
+    hip_y = (lh[1] + rh[1]) / 2
+    knee_y = (lk[1] + rk[1]) / 2
+    torso_span = hip_y - shoulder_y
+    upper_leg_span = knee_y - hip_y
+    if torso_span <= 1:
+        return None
+
+    ratio = upper_leg_span / torso_span
+    if ratio < 0.35:
+        return "SUSPECT CRAWLING / SQUATTING"
+    return "PEDESTRIAN"
+
+
 def post_event(backend_url: str, **kwargs) -> dict | None:
     # A malformed payload or a dead backend must never take the detection
     # loop down with it — this is best-effort telemetry, not the pipeline's
@@ -102,6 +150,7 @@ def main():
     source = int(args.source) if args.source.isdigit() else args.source
 
     model = YOLO(args.model)
+    pose_model = YOLO(args.pose_model) if args.pose_model else None
     tracker = sv.ByteTrack()
     box_annotator = sv.BoxAnnotator()
     label_annotator = sv.LabelAnnotator()
@@ -143,6 +192,8 @@ def main():
     detected_fired: set[int] = set()
     plate_voters: dict[int, PlateVoter] = {}
     plate_posted: dict[int, str] = {}
+    position_history: dict[int, deque[tuple[float, float, float]]] = {}  # track_id -> deque[(cx, cy, t)]
+    latest_poses: list[dict] = []  # last computed pose payload, reused between throttled inference frames
     MIN_OCR_SAMPLES = 5
     OCR_EVERY_N_FRAMES = 5  # EasyOCR is slow on CPU; throttle per track
 
@@ -170,6 +221,17 @@ def main():
         t_detect = time.time()
 
         in_zone = zone.trigger(detections) if len(detections) else np.array([], dtype=bool)
+
+        pose_candidates: list[tuple[tuple[float, float, float, float], np.ndarray]] = []
+        pose_ran_this_frame = pose_model is not None and frame_count % args.pose_every_n_frames == 0
+        if pose_ran_this_frame:
+            latest_poses = []
+            pose_results = pose_model(frame, verbose=False)[0]
+            if pose_results.keypoints is not None and len(pose_results.boxes):
+                boxes_xyxy = pose_results.boxes.xyxy.cpu().numpy()
+                kpts = pose_results.keypoints.data.cpu().numpy()  # (n, 17, 3) x,y,conf in pixels
+                for box, kp in zip(boxes_xyxy, kpts):
+                    pose_candidates.append((tuple(float(v) for v in box), kp))
 
         labels = []
         for i in range(len(detections)):
@@ -253,6 +315,43 @@ def main():
                     if created:
                         pending_evidence.append(created["id"])
 
+                # Trajectory + pose: real centroid history for this track (not
+                # a fabricated "1.4 m/s" — no camera is calibrated to convert
+                # px/s to real-world speed, so this stays in frame-space units,
+                # honestly labeled as such on the dashboard).
+                history = position_history.setdefault(track_id, deque(maxlen=10))
+                history.append((cx, cy, now))
+
+                best_match, best_iou = None, 0.3  # below this IoU, treat as no match rather than guess
+                track_box = tuple(float(v) for v in detections.xyxy[i])
+                for box, kp in pose_candidates:
+                    score = iou(track_box, box)
+                    if score > best_iou:
+                        best_iou, best_match = score, kp
+
+                if best_match is not None:
+                    behavior = classify_posture(best_match)
+                    heading_deg = speed_px_s = None
+                    if len(history) >= 2:
+                        (x0, y0, t0) = history[0]
+                        (x1p, y1p, t1) = history[-1]
+                        dt = t1 - t0
+                        if dt > 0.1:
+                            dx, dy = x1p - x0, y1p - y0
+                            speed_px_s = round(float(np.hypot(dx, dy) / dt), 1)
+                            heading_deg = round(float(np.degrees(np.arctan2(-dy, dx)) % 360), 1)
+
+                    normalized_kp = [[round(float(x / w), 4), round(float(y / h), 4), round(float(c), 2)] for x, y, c in best_match]
+                    latest_poses.append(
+                        {
+                            "track_id": track_id,
+                            "keypoints": normalized_kp,
+                            "behavior": behavior,
+                            "heading_deg": heading_deg,
+                            "speed_px_s": speed_px_s,
+                        }
+                    )
+
             plate_label = ""
             if kind == "vehicle":
                 voter = plate_voters.setdefault(track_id, PlateVoter())
@@ -303,6 +402,7 @@ def main():
                 latency_ms=round(latency_ms, 1),
                 active_tracks=len(detections),
                 zone_polygon=zone_polygon_norm,
+                poses=latest_poses,
             )
 
         cv2.putText(
