@@ -185,3 +185,18 @@ body {
 .tactical-map .leaflet-tile-pane {
   filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9);
 }
+
+@keyframes radar-ping-alert {
+  0% {
+    transform: scale(0.5);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(3.2);
+    opacity: 0;
+  }
+}
+.radar-marker--alert .radar-marker__ring {
+  animation: radar-ping-alert 0.9s cubic-bezier(0, 0, 0.2, 1) infinite;
+  border-width: 3px;
+}
