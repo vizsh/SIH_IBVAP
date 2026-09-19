@@ -48,6 +48,7 @@ class EventOut(EventIn):
 
 class ReviewAction(BaseModel):
     action: str  # "confirm" | "dismiss"
+    reason: Optional[str] = None  # dismiss reason, e.g. "Animal/foliage movement" — logged into the audit trail
 
 
 class TelemetryIn(BaseModel):

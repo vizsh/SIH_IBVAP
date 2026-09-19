@@ -183,10 +183,13 @@ async def review_event(event_id: int, action: ReviewAction, db: Session = Depend
     row.status = "confirmed" if action.action == "confirm" else "dismissed"
     db.commit()
 
-    audit_entry = audit.append_entry(db, action=f"event_{action.action}", detail=f"reviewer action on event {event_id}", event_id=event_id)
+    detail = f"reviewer action on event {event_id}"
+    if action.reason:
+        detail += f" — reason: {action.reason}"
+    audit_entry = audit.append_entry(db, action=f"event_{action.action}", detail=detail, event_id=event_id)
     await _broadcast_audit(audit_entry)
 
-    await manager.broadcast({"type": "event_updated", "data": {"id": event_id, "status": row.status}})
+    await manager.broadcast({"type": "event_updated", "data": {"id": event_id, "status": row.status, "reason": action.reason}})
     return {"id": event_id, "status": row.status}
 
 

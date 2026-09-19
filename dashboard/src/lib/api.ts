@@ -21,11 +21,11 @@ export async function fetchEvents(): Promise<IbvapEvent[]> {
   return res.json()
 }
 
-export async function reviewEvent(id: number, action: 'confirm' | 'dismiss') {
+export async function reviewEvent(id: number, action: 'confirm' | 'dismiss', reason?: string) {
   const res = await fetch(`${API_BASE}/events/${id}/review`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action }),
+    body: JSON.stringify({ action, reason }),
   })
   if (!res.ok) throw new Error('failed to review event')
   return res.json()

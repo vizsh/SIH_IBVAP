@@ -1,13 +1,18 @@
 import { useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
+import { toast } from 'sonner'
 import ClickSpark from '@/components/ClickSpark'
+import { triggerConfirmFlash } from '@/lib/confirmFlash'
 import type { IbvapEvent } from '@/types'
 
+const DISMISS_REASONS = ['Animal / foliage movement', 'False positive', 'Authorized personnel', 'Other']
+
 /**
- * Confirm/Dismiss button interaction (reference doc Feature 1): confirming
- * escalates a medium-confidence alert, so it gets a deliberate crimson
- * spark-flash; dismissing is a false-alarm, so it fades out gracefully
- * instead of just snapping to a status label.
+ * Confirm/Dismiss button interaction (Feature 4): confirming dispatches a
+ * real alert, so it gets a screen-wide crimson flash + a dispatch toast —
+ * not just a color change on the button. Dismissing captures a reason,
+ * which the backend logs into the audit trail — this is the platform's own
+ * "how do we prove we're not just crying wolf" performance record.
  */
 export function ReviewActions({
   status,
@@ -16,19 +21,45 @@ export function ReviewActions({
 }: {
   status: IbvapEvent['status']
   onConfirm: () => void
-  onDismiss: () => void
+  onDismiss: (reason: string) => void
 }) {
   const [flashConfirm, setFlashConfirm] = useState(false)
+  const [pickingReason, setPickingReason] = useState(false)
 
   function handleConfirm() {
     setFlashConfirm(true)
+    triggerConfirmFlash()
+    toast.success('Alert dispatched to duty officer', { duration: 3000 })
     window.setTimeout(() => onConfirm(), 260)
+  }
+
+  function handleDismiss(reason: string) {
+    setPickingReason(false)
+    onDismiss(reason)
   }
 
   return (
     <div className="relative z-10 mt-2 min-h-[26px]">
       <AnimatePresence mode="wait">
-        {status === 'pending' && !flashConfirm ? (
+        {pickingReason ? (
+          <motion.div
+            key="reasons"
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="flex flex-wrap gap-1"
+          >
+            {DISMISS_REASONS.map((reason) => (
+              <button
+                key={reason}
+                onClick={() => handleDismiss(reason)}
+                className="rounded-md bg-zinc-800/60 px-2 py-1 text-[10px] font-medium text-zinc-400 hover:bg-zinc-700/60"
+              >
+                {reason}
+              </button>
+            ))}
+          </motion.div>
+        ) : status === 'pending' && !flashConfirm ? (
           <motion.div
             key="actions"
             initial={{ opacity: 0 }}
@@ -48,7 +79,7 @@ export function ReviewActions({
               </motion.button>
             </ClickSpark>
             <motion.button
-              onClick={onDismiss}
+              onClick={() => setPickingReason(true)}
               whileTap={{ scale: 0.93 }}
               className="rounded-md bg-zinc-700/40 px-2.5 py-1 text-xs font-medium text-zinc-300 hover:bg-zinc-700/60"
             >

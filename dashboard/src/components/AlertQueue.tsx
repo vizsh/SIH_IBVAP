@@ -4,6 +4,7 @@ import { Layers } from 'lucide-react'
 import { reviewEvent } from '../lib/api'
 import { cn } from '@/lib/utils'
 import { GlowingEffect } from '@/components/glowing-effect'
+import { ConfidenceGauge } from '@/components/console/ConfidenceGauge'
 import { DwellTimer } from '@/components/console/DwellTimer'
 import { EvidenceThumbnail } from '@/components/console/EvidenceThumbnail'
 import { ReviewActions } from '@/components/console/ReviewActions'
@@ -32,7 +33,7 @@ function timeAgo(iso: string): string {
   return `${Math.floor(seconds / 60)}m ago`
 }
 
-function AlertCard({ e, onConfirm, onDismiss }: { e: IbvapEvent; onConfirm: () => void; onDismiss: () => void }) {
+function AlertCard({ e, onConfirm, onDismiss }: { e: IbvapEvent; onConfirm: () => void; onDismiss: (reason: string) => void }) {
   return (
     <motion.div
       layout
@@ -53,6 +54,8 @@ function AlertCard({ e, onConfirm, onDismiss }: { e: IbvapEvent; onConfirm: () =
           </div>
           <TierPill tier={e.confidence_tier} />
         </div>
+
+        <ConfidenceGauge confidence={e.confidence} tier={e.confidence_tier} />
 
         {e.event_type === 'loitering' && e.dwell_seconds != null && (
           <div className="mt-2">
@@ -100,10 +103,10 @@ export function AlertQueue({
 }) {
   const items = useMemo(() => groupEvents(events), [events])
 
-  async function handle(id: number, action: 'confirm' | 'dismiss') {
+  async function handle(id: number, action: 'confirm' | 'dismiss', reason?: string) {
     onUpdate(id, action === 'confirm' ? 'confirmed' : 'dismissed')
     try {
-      await reviewEvent(id, action)
+      await reviewEvent(id, action, reason)
     } catch {
       // best-effort optimistic update; a failed request will self-correct on next WS event
     }
@@ -120,7 +123,7 @@ export function AlertQueue({
                 key={item.event.id}
                 e={item.event}
                 onConfirm={() => handle(item.event.id, 'confirm')}
-                onDismiss={() => handle(item.event.id, 'dismiss')}
+                onDismiss={(reason) => handle(item.event.id, 'dismiss', reason)}
               />
             ) : (
               <ClusterCard key={`cluster-${item.events[0].id}`} events={item.events} />

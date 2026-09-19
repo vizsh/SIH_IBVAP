@@ -4,6 +4,7 @@ import { StatBar } from '@/components/StatBar'
 import { StatusBadge } from '@/components/StatusBadge'
 import { VideoPane } from '@/components/VideoPane'
 import { AuditPreviewCard } from '@/components/console/AuditPreviewCard'
+import { EscalationPipeline } from '@/components/console/EscalationPipeline'
 import { HardwareHealthBar } from '@/components/console/HardwareHealthBar'
 import { NetworkKillSwitch } from '@/components/console/NetworkKillSwitch'
 import { BentoGrid } from '@/components/ui/bento-grid'
@@ -37,6 +38,10 @@ export default function ConsolePage() {
 
       <div className="mb-4">
         <StatBar events={events} />
+      </div>
+
+      <div className="mb-4">
+        <EscalationPipeline events={events} />
       </div>
 
       <div className="grid grid-cols-3 gap-4">

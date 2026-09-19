@@ -3,6 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import Particles from '@/components/Particles'
 import { AuditTerminalWidget } from '@/components/console/AuditTerminalWidget'
+import { ConfirmFlashOverlay } from '@/components/console/ConfirmFlashOverlay'
 import { Toaster } from '@/components/ui/sonner'
 import { useCorrelationWatcher } from '@/hooks/useCorrelationWatcher'
 
@@ -68,6 +69,7 @@ export function SiteShell() {
 
       <Toaster position="top-center" />
       <AuditTerminalWidget />
+      <ConfirmFlashOverlay />
     </div>
   )
 }
