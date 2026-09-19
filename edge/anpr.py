@@ -52,17 +52,27 @@ def read_candidates(crop_bgr: np.ndarray) -> list[tuple[str, float]]:
 
 @dataclass
 class PlateVoter:
-    """Per-track rolling buffer of OCR readings, fused on demand."""
+    """Per-track rolling buffer of OCR readings, fused on demand. Keeps the
+    frame number and wall-clock timestamp per sample too, not just the
+    reading — the multi-frame voting *matrix* the UI shows (Feature 2) is
+    only real if it can display which frame each reading came from, not
+    just the final fused answer."""
 
     max_samples: int = 30
     samples: list[tuple[str, float]] = field(default_factory=list)
+    frame_log: list[dict] = field(default_factory=list)  # [{frame, timestamp, reading, confidence}]
 
-    def add(self, readings: list[tuple[str, float]]) -> None:
+    def add(self, readings: list[tuple[str, float]], frame_number: int | None = None, timestamp: float | None = None) -> None:
         # keep the single best-confidence reading per frame, if any
         if readings:
             best = max(readings, key=lambda r: r[1])
             self.samples.append(best)
             self.samples = self.samples[-self.max_samples :]
+            if frame_number is not None:
+                self.frame_log.append(
+                    {"frame": frame_number, "timestamp": timestamp, "reading": best[0], "confidence": best[1]}
+                )
+                self.frame_log = self.frame_log[-self.max_samples :]
 
     def fuse(self) -> tuple[str, float] | None:
         if not self.samples:

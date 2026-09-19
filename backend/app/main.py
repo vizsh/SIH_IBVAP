@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import random
 import time
@@ -74,6 +75,7 @@ def _event_out(row: dbm.Event) -> EventOut:
         travel_max_minutes=row.travel_max_minutes,
         elapsed_minutes=row.elapsed_minutes,
         from_camera_id=row.from_camera_id,
+        ocr_samples=json.loads(row.ocr_samples_json) if row.ocr_samples_json else None,
     )
 
 
@@ -132,6 +134,7 @@ async def create_event(event: EventIn, db: Session = Depends(dbm.get_db)):
         travel_max_minutes=event.travel_max_minutes,
         elapsed_minutes=event.elapsed_minutes,
         from_camera_id=event.from_camera_id,
+        ocr_samples_json=json.dumps(event.ocr_samples) if event.ocr_samples else None,
     )
     db.add(row)
     db.commit()

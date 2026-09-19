@@ -237,7 +237,7 @@ def main():
                     x1, y1, x2, y2 = map(int, detections.xyxy[i])
                     crop = frame[max(0, y1) : y2, max(0, x1) : x2]
                     try:
-                        voter.add(read_candidates(crop))
+                        voter.add(read_candidates(crop), frame_number=frame_count, timestamp=now)
                     except Exception as e:  # OCR must never take the whole pipeline down
                         print(f"[warn] OCR failed for track {track_id}: {e}")
 
@@ -255,6 +255,7 @@ def main():
                             track_id=track_id,
                             plate_text=plate,
                             detail=f"multi-frame fusion, {len(voter.samples)} samples, {accuracy:.1f}% fused accuracy",
+                            ocr_samples=voter.frame_log,
                         )
                         if created:
                             pending_evidence.append(created["id"])

@@ -3,12 +3,9 @@ import { Car } from 'lucide-react'
 import CountUp from '@/components/CountUp'
 import DecryptedText from '@/components/DecryptedText'
 import { GlowingEffect } from '@/components/glowing-effect'
+import type { OcrSample } from '@/types'
 
-interface FrameReading {
-  frame: number
-  reading: string
-  confidence: number
-}
+type FrameReading = OcrSample
 
 /**
  * Multi-frame ANPR fusion display (reference doc Section 4/16): a single
@@ -35,14 +32,22 @@ function fuseModalResult(frames: FrameReading[]): { plate: string; accuracy: num
 }
 
 const DEMO_FRAMES: FrameReading[] = [
-  { frame: 1, reading: 'HR26AB1234', confidence: 0.88 },
-  { frame: 2, reading: 'HR26AB123A', confidence: 0.62 },
-  { frame: 3, reading: 'HR26AB1234', confidence: 0.94 },
-  { frame: 4, reading: 'HR26AB1234', confidence: 0.91 },
-  { frame: 5, reading: 'HR268B1234', confidence: 0.58 },
+  { frame: 1, timestamp: null, reading: 'HR26AB1234', confidence: 0.88 },
+  { frame: 2, timestamp: null, reading: 'HR26AB123A', confidence: 0.62 },
+  { frame: 3, timestamp: null, reading: 'HR26AB1234', confidence: 0.94 },
+  { frame: 4, timestamp: null, reading: 'HR26AB1234', confidence: 0.91 },
+  { frame: 5, timestamp: null, reading: 'HR268B1234', confidence: 0.58 },
 ]
 
-export function AnprVotingCard({ frames = DEMO_FRAMES }: { frames?: FrameReading[] }) {
+export function AnprVotingCard({
+  frames = DEMO_FRAMES,
+  live = false,
+  fullWidth = false,
+}: {
+  frames?: FrameReading[]
+  live?: boolean
+  fullWidth?: boolean
+}) {
   const [visibleFrames, setVisibleFrames] = useState<FrameReading[]>([])
   const fused = fuseModalResult(frames)
 
@@ -55,11 +60,18 @@ export function AnprVotingCard({ frames = DEMO_FRAMES }: { frames?: FrameReading
   }, [frames])
 
   return (
-    <div className="relative w-72 rounded-xl border border-zinc-800 bg-zinc-950/90 p-4 backdrop-blur-sm">
+    <div className={`relative rounded-xl border border-zinc-800 bg-zinc-950/90 p-4 backdrop-blur-sm ${fullWidth ? 'w-full' : 'w-72'}`}>
       <GlowingEffect disabled={false} glow proximity={80} spread={26} borderWidth={2} />
       <div className="relative z-10">
-        <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-cyan-400">
-          <Car size={14} /> Multi-frame ANPR fusion
+        <div className="mb-2 flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wider text-cyan-400">
+          <span className="flex items-center gap-2">
+            <Car size={14} /> Multi-frame ANPR fusion
+          </span>
+          {live && (
+            <span className="flex items-center gap-1 text-[9px] font-semibold text-emerald-400">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" /> LIVE READ
+            </span>
+          )}
         </div>
 
         <div className="mb-3 rounded-md border border-zinc-800 bg-black/60 px-3 py-2 text-center font-mono text-lg tracking-[0.2em] text-emerald-400">
@@ -70,7 +82,8 @@ export function AnprVotingCard({ frames = DEMO_FRAMES }: { frames?: FrameReading
           {visibleFrames.map((f) => (
             <div key={f.frame} className="flex justify-between">
               <span>
-                Frame {String(f.frame).padStart(2, '0')}: {f.reading}
+                Frame {String(f.frame).padStart(3, '0')}
+                {f.timestamp != null ? ` @${f.timestamp.toFixed(1)}s` : ''}: {f.reading}
               </span>
               <span className={f.reading === fused.plate ? 'text-emerald-500' : 'text-zinc-600'}>
                 {(f.confidence * 100).toFixed(0)}%

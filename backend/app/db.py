@@ -36,6 +36,7 @@ class Event(Base):
     travel_max_minutes = Column(Float, nullable=True)
     elapsed_minutes = Column(Float, nullable=True)
     from_camera_id = Column(String, nullable=True)
+    ocr_samples_json = Column(String, nullable=True)  # JSON-encoded list[dict]
     created_at = Column(DateTime, default=utcnow)
 
 

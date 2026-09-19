@@ -44,6 +44,11 @@ class EventIn(BaseModel):
     elapsed_minutes: Optional[float] = None
     from_camera_id: Optional[str] = None
 
+    # anpr_read only: the real per-frame OCR readings behind the fused
+    # plate_text — [{frame, timestamp, reading, confidence}, ...] — so the
+    # UI can show the actual multi-frame voting matrix, not just the answer.
+    ocr_samples: Optional[list[dict]] = None
+
 
 class EventOut(EventIn):
     id: int

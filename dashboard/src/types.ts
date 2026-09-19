@@ -30,6 +30,14 @@ export interface IbvapEvent {
   travel_max_minutes: number | null
   elapsed_minutes: number | null
   from_camera_id: string | null
+  ocr_samples: OcrSample[] | null
+}
+
+export interface OcrSample {
+  frame: number
+  timestamp: number | null
+  reading: string
+  confidence: number
 }
 
 export interface AuditEntry {

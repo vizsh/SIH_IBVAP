@@ -4,6 +4,7 @@ import { Layers } from 'lucide-react'
 import { reviewEvent } from '../lib/api'
 import { cn } from '@/lib/utils'
 import { GlowingEffect } from '@/components/glowing-effect'
+import { AnprVotingCard } from '@/components/console/AnprVotingCard'
 import { ConfidenceGauge } from '@/components/console/ConfidenceGauge'
 import { DwellTimer } from '@/components/console/DwellTimer'
 import { EvidenceThumbnail } from '@/components/console/EvidenceThumbnail'
@@ -60,6 +61,12 @@ function AlertCard({ e, onConfirm, onDismiss }: { e: IbvapEvent; onConfirm: () =
         {e.event_type === 'loitering' && e.dwell_seconds != null && (
           <div className="mt-2">
             <DwellTimer seconds={e.dwell_seconds} />
+          </div>
+        )}
+
+        {e.event_type === 'anpr_read' && e.ocr_samples && e.ocr_samples.length > 0 && (
+          <div className="mt-2">
+            <AnprVotingCard frames={e.ocr_samples} live fullWidth />
           </div>
         )}
 
