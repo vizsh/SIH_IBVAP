@@ -70,3 +70,74 @@ export function fovConePoints(site: CameraSite, rangeM: number): [number, number
 export function fovConeLngLat(site: CameraSite, rangeM: number): [number, number][] {
   return fovConePoints(site, rangeM).map(([lat, lng]) => [lng, lat])
 }
+
+/** A small square footprint centered at (lat, lng), in deck.gl's [lng, lat]
+ * order, closed. Corners placed on the diagonal bearings so the square
+ * isn't forced to cardinal alignment — a schematic footprint, not a
+ * surveyed building outline. */
+function squareFootprint(lat: number, lng: number, halfSizeM: number): [number, number][] {
+  const diag = halfSizeM * Math.SQRT2
+  const corners = [45, 135, 225, 315].map((b) => destinationPoint(lat, lng, b, diag))
+  const ring = corners.map(([la, ln]) => [ln, la] as [number, number])
+  return [...ring, ring[0]]
+}
+
+export interface CheckpointStructure {
+  towerFootprint: [number, number][]
+  towerHeight: number
+  cabinFootprint: [number, number][]
+  cabinHeight: number
+  fenceSegments: [number, number][][]
+  fenceHeight: number
+  gateBar: [[number, number, number], [number, number, number]]
+}
+
+/**
+ * A procedural, schematic checkpoint structure (watchtower + cabin, a
+ * fence line, a gate barrier) computed at the camera's real GPS coordinate
+ * — the same haversine projection already used for FoV cones, not an
+ * external 3D asset. Deliberately representative, not an as-built scan:
+ * no architectural survey exists for these real sites, so this is styled
+ * as an operational schematic (like the tactical grid), not a claim of
+ * structural accuracy.
+ */
+export function buildCheckpointStructure(site: CameraSite): CheckpointStructure {
+  const TOWER_HALF_M = 4
+  const TOWER_HEIGHT_M = 14
+  const CABIN_HALF_M = 6
+  const CABIN_HEIGHT_M = 5
+  const FENCE_HEIGHT_M = 2.5
+  const FENCE_HALF_M = 0.6
+  const FENCE_SPACING_M = 12
+  const FENCE_COUNT = 10
+  const FENCE_DISTANCE_M = 25
+  const GATE_HALF_WIDTH_M = 6
+  const GATE_HEIGHT_M = 3
+
+  const towerFootprint = squareFootprint(site.lat, site.lng, TOWER_HALF_M)
+  const cabinFootprint = squareFootprint(site.lat, site.lng, CABIN_HALF_M)
+
+  const perpBearing = (site.headingDeg + 90) % 360
+  const [fenceLat, fenceLng] = destinationPoint(site.lat, site.lng, site.headingDeg, FENCE_DISTANCE_M)
+  const fenceSegments: [number, number][][] = []
+  for (let i = -Math.floor(FENCE_COUNT / 2); i <= Math.floor(FENCE_COUNT / 2); i++) {
+    const [plat, plng] = destinationPoint(fenceLat, fenceLng, perpBearing, i * FENCE_SPACING_M)
+    fenceSegments.push(squareFootprint(plat, plng, FENCE_HALF_M))
+  }
+
+  const [g1lat, g1lng] = destinationPoint(site.lat, site.lng, perpBearing, -GATE_HALF_WIDTH_M)
+  const [g2lat, g2lng] = destinationPoint(site.lat, site.lng, perpBearing, GATE_HALF_WIDTH_M)
+
+  return {
+    towerFootprint,
+    towerHeight: TOWER_HEIGHT_M,
+    cabinFootprint,
+    cabinHeight: CABIN_HEIGHT_M,
+    fenceSegments,
+    fenceHeight: FENCE_HEIGHT_M,
+    gateBar: [
+      [g1lng, g1lat, GATE_HEIGHT_M],
+      [g2lng, g2lat, GATE_HEIGHT_M],
+    ],
+  }
+}

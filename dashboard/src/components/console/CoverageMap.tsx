@@ -5,10 +5,10 @@ import { MapboxOverlay } from '@deck.gl/mapbox'
 import { Map as MapLibreMap, NavigationControl } from 'maplibre-gl'
 import type { Map as MapLibreMapType, MapMouseEvent } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import { LayoutGrid, MapPinPlus, Satellite, Trash2, X } from 'lucide-react'
+import { Building2, LayoutGrid, MapPinPlus, Satellite, Trash2, X } from 'lucide-react'
 import { createPOI, deletePOI, fetchPOIs, type PointOfInterest } from '@/lib/api'
 import { API_BASE } from '@/lib/api'
-import { CAMERA_SITES, destinationPoint, fovConeLngLat, siteFor } from '@/lib/cameraSites'
+import { buildCheckpointStructure, CAMERA_SITES, destinationPoint, fovConeLngLat, siteFor } from '@/lib/cameraSites'
 import type { IbvapEvent } from '@/types'
 
 // Free, keyless MapLibre-compatible vector style (OpenFreeMap) — CARTO's
@@ -127,6 +127,7 @@ export function CoverageMap() {
   const [pulsePhase, setPulsePhase] = useState(0)
   const [showGrid, setShowGrid] = useState(false)
   const [showSatellite, setShowSatellite] = useState(false)
+  const [showStructures, setShowStructures] = useState(true)
   const [markingMode, setMarkingMode] = useState(false)
   const [pendingPoint, setPendingPoint] = useState<{ lat: number; lng: number } | null>(null)
   const [selected, setSelected] = useState<{ camera_id: string; label: string; status: CameraStatus; alerting: boolean } | null>(null)
@@ -300,6 +301,59 @@ export function CoverageMap() {
       transitions: { getFillColor: 150 },
     })
 
+    // Digital-twin checkpoint structures — procedural, real-GPS-anchored
+    // geometry (same haversine projection as the FoV cones), not an
+    // imported 3D asset: no as-built architectural data exists for these
+    // real sites, so this is styled as a schematic, not a scan. Skipped
+    // for the thermal sentry post, which is a standalone tower concept,
+    // not a full vehicle/pedestrian checkpoint.
+    const structureCameras = showStructures ? cameras.filter((c) => c.status !== 'unmonitored' && !c.site.isThermal) : []
+    const structures = structureCameras.map((c) => ({ camera: c, structure: buildCheckpointStructure(c.site) }))
+
+    const towerLayer = new PolygonLayer({
+      id: 'checkpoint-towers',
+      data: structures,
+      getPolygon: (d) => d.structure.towerFootprint.map(([lng, lat]) => [lng, lat, 0]),
+      getElevation: (d) => d.structure.towerHeight,
+      extruded: true,
+      wireframe: true,
+      getFillColor: [30, 58, 74, 160],
+      getLineColor: [103, 232, 249, 180],
+      lineWidthMinPixels: 1,
+    })
+
+    const cabinLayer = new PolygonLayer({
+      id: 'checkpoint-cabins',
+      data: structures,
+      getPolygon: (d) => d.structure.cabinFootprint.map(([lng, lat]) => [lng, lat, d.structure.towerHeight]),
+      getElevation: (d) => d.structure.cabinHeight,
+      extruded: true,
+      wireframe: true,
+      getFillColor: [8, 47, 73, 190],
+      getLineColor: [103, 232, 249, 220],
+      lineWidthMinPixels: 1,
+    })
+
+    const fenceLayer = new PolygonLayer({
+      id: 'checkpoint-fences',
+      data: structures.flatMap((d) => d.structure.fenceSegments.map((seg) => ({ seg, height: d.structure.fenceHeight }))),
+      getPolygon: (d) => d.seg.map(([lng, lat]) => [lng, lat, 0]),
+      getElevation: (d) => d.height,
+      extruded: true,
+      getFillColor: [245, 158, 11, 90],
+      getLineColor: [245, 158, 11, 140],
+      lineWidthMinPixels: 1,
+    })
+
+    const gateLayer = new LineLayer({
+      id: 'checkpoint-gates',
+      data: structures,
+      getSourcePosition: (d) => d.structure.gateBar[0],
+      getTargetPosition: (d) => d.structure.gateBar[1],
+      getColor: [251, 191, 36, 220],
+      getWidth: 3,
+    })
+
     const heatLayer = new HeatmapLayer({
       id: 'event-heatmap',
       data: heatPoints,
@@ -414,8 +468,10 @@ export function CoverageMap() {
       outlineColor: [10, 10, 10, 255],
     })
 
-    overlayRef.current.setProps({ layers: [gridLayer, heatLayer, coneLayer, ringLayer, markerLayer, poiLayer, poiLabelLayer, reticleLayer] })
-  }, [cameras, events, pois, pulsePhase, showGrid])
+    overlayRef.current.setProps({
+      layers: [gridLayer, heatLayer, towerLayer, cabinLayer, fenceLayer, gateLayer, coneLayer, ringLayer, markerLayer, poiLayer, poiLabelLayer, reticleLayer],
+    })
+  }, [cameras, events, pois, pulsePhase, showGrid, showStructures])
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-xl border border-zinc-800 bg-[#05070c]">
@@ -448,6 +504,14 @@ export function CoverageMap() {
           }`}
         >
           <MapPinPlus size={12} /> {markingMode ? 'Click map to mark…' : 'Mark intel point (NAI)'}
+        </button>
+        <button
+          onClick={() => setShowStructures((v) => !v)}
+          className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-semibold uppercase tracking-wider backdrop-blur-sm ${
+            showStructures ? 'border-cyan-500/60 bg-cyan-500/15 text-cyan-300' : 'border-zinc-700 bg-zinc-950/80 text-zinc-400'
+          }`}
+        >
+          <Building2 size={12} /> Checkpoint structures
         </button>
       </div>
 
