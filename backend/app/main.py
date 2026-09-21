@@ -20,6 +20,24 @@ app = FastAPI(title="IBVAP Backend", version="0.1.0")
 # an auditable record, so it doesn't belong in the events/audit tables.
 latest_telemetry: dict[str, dict] = {}
 
+# Per-camera, per-event-type cooldown: a looping demo video re-triggers the
+# same intrusion/detection every time it seeks back to frame 0 (ByteTrack
+# hands out fresh track ids after the jump, so the edge pipeline's own
+# per-track dedup can't catch it) — this is the backend-level fix, and it
+# also doubles as real "operator alert fatigue" prevention for a genuine
+# deployment, not just a demo-looping workaround. correlation_match is
+# exempt: it's already gated by real cross-camera correlation logic, so an
+# additional cooldown there would just suppress genuinely distinct matches.
+COOLDOWN_SECONDS: dict[str, float] = {
+    "virtual_fence_intrusion": 60.0,
+    "loitering": 90.0,
+    "person_detected": 45.0,
+    "vehicle_detected": 45.0,
+    "anpr_read": 30.0,
+}
+_last_fired_at: dict[tuple[str, str], float] = {}
+_last_event_id: dict[tuple[str, str], int] = {}
+
 # Evidence snapshots: the actual annotated frame that triggered each alert,
 # not just a text description of it. Confirmed-alert clips are exactly what
 # the reference doc says should cross the edge->command boundary alongside
@@ -115,6 +133,20 @@ def get_all_telemetry():
 
 @app.post("/events", response_model=EventOut)
 async def create_event(event: EventIn, db: Session = Depends(dbm.get_db)):
+    cooldown = COOLDOWN_SECONDS.get(event.event_type.value)
+    if cooldown:
+        key = (event.camera_id, event.event_type.value)
+        now = time.time()
+        last = _last_fired_at.get(key)
+        if last is not None and now - last < cooldown:
+            existing_id = _last_event_id.get(key)
+            existing_row = db.query(dbm.Event).filter(dbm.Event.id == existing_id).first() if existing_id else None
+            if existing_row:
+                # Suppressed as a repeat within the cooldown window — no new
+                # DB row, no new audit entry, no WS broadcast. The caller
+                # (edge pipeline) still gets a valid EventOut back so its
+                # evidence-upload flow has an id to attach to.
+                return _event_out(existing_row)
     tier = confidence.tier_for(event.event_type, event.confidence)
     status = confidence.initial_status(tier)
 
@@ -143,6 +175,11 @@ async def create_event(event: EventIn, db: Session = Depends(dbm.get_db)):
     db.add(row)
     db.commit()
     db.refresh(row)
+
+    if cooldown:
+        key = (event.camera_id, event.event_type.value)
+        _last_fired_at[key] = time.time()
+        _last_event_id[key] = row.id
 
     audit_entry = audit.append_entry(db, action="event_created", detail=f"{event.event_type.value}@{event.camera_id}", event_id=row.id)
     await _broadcast_audit(audit_entry)
