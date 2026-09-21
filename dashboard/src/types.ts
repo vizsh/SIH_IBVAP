@@ -32,6 +32,7 @@ export interface IbvapEvent {
   from_camera_id: string | null
   ocr_samples: OcrSample[] | null
   trail: TrailPoint[] | null
+  sensor_mode: 'thermal' | null
 }
 
 export interface TrailPoint {

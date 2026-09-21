@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Layers, Rewind } from 'lucide-react'
+import { Flame, Layers, Rewind } from 'lucide-react'
 import { reviewEvent } from '../lib/api'
 import { cn } from '@/lib/utils'
 import { GlowingEffect } from '@/components/glowing-effect'
@@ -58,7 +58,14 @@ function AlertCard({
       <div className="relative z-10 min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="truncate text-sm font-medium text-zinc-100">{EVENT_LABELS[e.event_type] ?? e.event_type}</div>
+            <div className="flex items-center gap-1.5 truncate text-sm font-medium text-zinc-100">
+              {EVENT_LABELS[e.event_type] ?? e.event_type}
+              {e.sensor_mode === 'thermal' && (
+                <span className="flex shrink-0 items-center gap-1 rounded border border-orange-600/50 bg-orange-500/10 px-1 py-0.5 text-[9px] font-semibold uppercase text-orange-400">
+                  <Flame size={9} /> Thermal
+                </span>
+              )}
+            </div>
             <div className="text-xs text-zinc-500">
               {e.camera_id} · {timeAgo(e.created_at)} · conf {(e.confidence * 100).toFixed(0)}%
             </div>

@@ -16,6 +16,12 @@ export interface CameraSite {
   // stance as the haversine travel-time estimates in camera_sites.py.
   headingDeg: number
   fovDeg: number
+  // True only for a dedicated LWIR/thermal-only sentry post — never set on
+  // an ordinary RGB camera. No real thermal hardware exists on this
+  // platform's actual BOP cameras, so this flag exists specifically to
+  // keep a thermal-only post visually and semantically distinct rather
+  // than implying every camera can "switch" to thermal.
+  isThermal?: boolean
 }
 
 export const CAMERA_SITES: Record<string, CameraSite> = {
@@ -24,6 +30,10 @@ export const CAMERA_SITES: Record<string, CameraSite> = {
   'BOP-Bravo': { lat: 26.3931, lng: 87.2589, label: 'Jogbani ICP (Indo-Nepal)', headingDeg: 5, fovDeg: 80 },
   'BOP-02': { lat: 26.9598, lng: 88.1852, label: 'Panitanki (Indo-Nepal)', headingDeg: 15, fovDeg: 80 },
   'BOP-TEST2': { lat: 26.9958, lng: 84.8534, label: 'Raxaul ICP (Indo-Nepal)', headingDeg: 340, fovDeg: 80 },
+  // Supplementary thermal watchtower near the Jogbani gap — a documented
+  // placement choice (real known unfenced-corridor risk area), not a
+  // measured GPS fix for actual hardware that doesn't exist.
+  'BOP-Sentry-Thermal': { lat: 26.4021, lng: 87.2680, label: 'Jogbani Gap — LWIR Sentry Post', headingDeg: 5, fovDeg: 60, isThermal: true },
 }
 
 export function siteFor(cameraId: string): CameraSite {

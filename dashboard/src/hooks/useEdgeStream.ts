@@ -17,6 +17,7 @@ const STREAM_PORTS: Record<string, number> = {
   'BOP-01': 8091,
   'BOP-Alpha': 8092,
   'BOP-Bravo': 8093,
+  'BOP-Sentry-Thermal': 8094,
 }
 const DEFAULT_PORT = 8091
 

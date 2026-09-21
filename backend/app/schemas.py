@@ -58,6 +58,12 @@ class EventIn(BaseModel):
     # fabricate a precision that doesn't exist.
     trail: Optional[list[dict]] = None
 
+    # Set only on events from a dedicated thermal (LWIR-style) camera post —
+    # never inferred, never defaulted to "thermal" for an ordinary RGB
+    # camera. Lets the dashboard show a THERMAL badge instead of silently
+    # presenting IR-sourced detections as if they were optical.
+    sensor_mode: Optional[str] = None  # "thermal" | None (omitted = ordinary optical camera)
+
 
 class EventOut(EventIn):
     id: int
@@ -92,6 +98,13 @@ class TelemetryIn(BaseModel):
     # speed_px_s is frame-space pixels/sec, not a fabricated real-world
     # m/s — no camera calibration exists to make that conversion honest.
     poses: Optional[list[dict]] = None
+
+    # Real measured ambient frame brightness (0-255 grayscale mean) — the
+    # same signal a real zero-light auto-switch would key off of. No
+    # co-located thermal sensor exists for any optical camera here, so this
+    # is reported as real telemetry rather than wired to a fake auto-switch.
+    mean_brightness: Optional[float] = None
+    sensor_mode: Optional[str] = None  # "thermal" | None
 
 
 class FenceIn(BaseModel):

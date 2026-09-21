@@ -212,8 +212,8 @@ export function CoverageMap() {
       getPolygon: (d) => fovConeLngLat(d.site, CONE_RANGE_M).map(([lng, lat]) => [lng, lat, d.alerting ? CONE_HEIGHT_M * (0.7 + 0.3 * pulse) : CONE_HEIGHT_M * 0.4]),
       extruded: true,
       wireframe: true,
-      getFillColor: (d) => (d.alerting ? [239, 68, 68, 60 + pulseFast * 30] : d.status === 'live' ? [6, 182, 212, 45] : [245, 158, 11, 30]),
-      getLineColor: (d) => (d.alerting ? [248, 113, 113, 220] : d.status === 'live' ? [34, 211, 238, 160] : [245, 158, 11, 130]),
+      getFillColor: (d) => (d.alerting ? [239, 68, 68, 60 + pulseFast * 30] : d.site.isThermal ? [251, 146, 60, 55] : d.status === 'live' ? [6, 182, 212, 45] : [245, 158, 11, 30]),
+      getLineColor: (d) => (d.alerting ? [248, 113, 113, 220] : d.site.isThermal ? [251, 146, 60, 200] : d.status === 'live' ? [34, 211, 238, 160] : [245, 158, 11, 130]),
       lineWidthMinPixels: 1.5,
       pickable: false,
       updateTriggers: { getFillColor: [pulsePhase], getPolygon: [pulsePhase] },
@@ -242,7 +242,16 @@ export function CoverageMap() {
       data: cameras,
       getPosition: (d) => [d.site.lng, d.site.lat],
       getRadius: (d) => (d.alerting ? 900 + pulse * 300 : 550),
-      getFillColor: (d) => (d.alerting ? [239, 68, 68, 230] : d.status === 'live' ? [16, 185, 129, 230] : d.status === 'armed' ? [245, 158, 11, 220] : [82, 82, 91, 200]),
+      getFillColor: (d) =>
+        d.alerting
+          ? [239, 68, 68, 230]
+          : d.site.isThermal
+            ? [251, 146, 60, 230]
+            : d.status === 'live'
+              ? [16, 185, 129, 230]
+              : d.status === 'armed'
+                ? [245, 158, 11, 220]
+                : [82, 82, 91, 200],
       getLineColor: [5, 7, 12, 255],
       lineWidthMinPixels: 2,
       stroked: true,

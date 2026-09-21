@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Camera, ScanLine } from 'lucide-react'
+import { Camera, Flame, ScanLine } from 'lucide-react'
 import Crosshair from '@/components/Crosshair'
 import { AnprVotingCard } from '@/components/console/AnprVotingCard'
 import { GhostReplay } from '@/components/console/GhostReplay'
@@ -28,6 +28,11 @@ export function VideoPane({
       <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3 text-sm font-semibold text-zinc-300">
         Camera feed — {cameraId}
         <div className="flex items-center gap-2">
+          {telemetry?.sensor_mode === 'thermal' && (
+            <span className="flex items-center gap-1 rounded-md border border-orange-600/50 bg-orange-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-orange-400">
+              <Flame size={11} /> Thermal / LWIR-style
+            </span>
+          )}
           <span
             className={
               stream.status === 'live'
@@ -62,7 +67,8 @@ export function VideoPane({
             <span className="text-xs">
               Edge pipeline not running — start it with{' '}
               <code className="rounded bg-zinc-800 px-1 py-0.5 text-zinc-400">
-                python edge/pipeline.py --camera-id {cameraId} --stream-port {cameraId === 'BOP-Alpha' ? 8092 : cameraId === 'BOP-Bravo' ? 8093 : 8091}
+                python edge/pipeline.py --camera-id {cameraId} --stream-port{' '}
+                {cameraId === 'BOP-Alpha' ? 8092 : cameraId === 'BOP-Bravo' ? 8093 : cameraId === 'BOP-Sentry-Thermal' ? 8094 : 8091}
               </code>
             </span>
           </div>

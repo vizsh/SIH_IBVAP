@@ -55,6 +55,12 @@ def parse_args():
     p.add_argument("--max-seconds", type=float, default=None, help="stop after N seconds (for scripted test runs)")
     p.add_argument("--stream-port", type=int, default=8091, help="MJPEG preview stream port (0 to disable)")
     p.add_argument("--loop", action="store_true", help="seek back to frame 0 at end of file instead of stopping — makes a video file behave like a continuous live feed")
+    p.add_argument(
+        "--sensor-mode",
+        default="optical",
+        choices=["optical", "thermal"],
+        help="'thermal' tags events/telemetry as LWIR-sourced and disables pose estimation (no thermal-trained pose model exists here, so running the RGB pose model on IR imagery would be fabricated output, not a real reading)",
+    )
     return p.parse_args()
 
 
@@ -151,6 +157,9 @@ def main():
     source = int(args.source) if args.source.isdigit() else args.source
 
     model = YOLO(args.model)
+    if args.sensor_mode == "thermal" and args.pose_model:
+        print("[edge] thermal sensor mode — disabling pose estimation (no thermal-trained pose model exists, RGB pose on IR would be fabricated)")
+        args.pose_model = None
     pose_model = YOLO(args.pose_model) if args.pose_model else None
     tracker = sv.ByteTrack()
     box_annotator = sv.BoxAnnotator()
@@ -209,6 +218,12 @@ def main():
         if not trail:
             return None
         return [{"x": round(x / w, 4), "y": round(y / h, 4), "t": t} for x, y, t in trail]
+
+    def emit_event(**kwargs) -> dict | None:
+        if args.sensor_mode != "optical":
+            kwargs["sensor_mode"] = args.sensor_mode
+        return post_event(args.backend, camera_id=args.camera_id, **kwargs)
+
     latest_poses: list[dict] = []  # last computed pose payload, reused between throttled inference frames
     MIN_OCR_SAMPLES = 5
     OCR_EVERY_N_FRAMES = 5  # EasyOCR is slow on CPU; throttle per track
@@ -266,14 +281,12 @@ def main():
             if track_id not in detected_fired:
                 detected_fired.add(track_id)
                 x1, y1, x2, y2 = (float(v) for v in detections.xyxy[i])
-                created = post_event(
-                    args.backend,
-                    camera_id=args.camera_id,
+                created = emit_event(
                     event_type="person_detected" if kind == "person" else "vehicle_detected",
                     confidence=conf,
                     track_id=track_id,
                     bbox=[x1 / w, y1 / h, x2 / w, y2 / h],
-                    detail=f"YOLOv8n+ByteTrack, track {track_id}",
+                    detail=(f"YOLOv8-thermal (pitangent-ds), track {track_id}" if args.sensor_mode == "thermal" else f"YOLOv8n+ByteTrack, track {track_id}"),
                 )
                 if created:
                     pending_evidence.append(created["id"])
@@ -285,9 +298,7 @@ def main():
                 dwell_in_zone = now - zone_entry[track_id]
                 if dwell_in_zone >= INTRUSION_CONFIRM_SECONDS and track_id not in intrusion_fired:
                     intrusion_fired.add(track_id)
-                    created = post_event(
-                        args.backend,
-                        camera_id=args.camera_id,
+                    created = emit_event(
                         event_type="virtual_fence_intrusion",
                         confidence=0.97,
                         track_id=track_id,
@@ -333,9 +344,7 @@ def main():
                 dwell_near_spot = now - anchor_time
                 if dwell_near_spot >= LOITER_THRESHOLD_SECONDS and track_id not in loiter_fired:
                     loiter_fired.add(track_id)
-                    created = post_event(
-                        args.backend,
-                        camera_id=args.camera_id,
+                    created = emit_event(
                         event_type="loitering",
                         confidence=0.95,
                         track_id=track_id,
@@ -400,9 +409,7 @@ def main():
                     plate_label = f" [{plate}]"
                     if plate_posted.get(track_id) != plate:
                         plate_posted[track_id] = plate
-                        created = post_event(
-                            args.backend,
-                            camera_id=args.camera_id,
+                        created = emit_event(
                             event_type="anpr_read",
                             confidence=min(0.99, accuracy / 100),
                             track_id=track_id,
@@ -426,6 +433,14 @@ def main():
 
         if t_done - last_telemetry_push >= 1.0:
             last_telemetry_push = t_done
+            # Real measured ambient brightness (not a placeholder) — the same
+            # signal the doc's "Lux < 0.1" auto-switch logic would key off of.
+            # No RGB/thermal sensor pair is co-located here to actually switch
+            # between, so this is reported as real telemetry rather than wired
+            # to a fake auto-switch — see the dedicated thermal camera post
+            # for the actual thermal detection path.
+            mean_brightness = round(float(np.mean(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))), 1)
+
             post_event(
                 args.backend.replace("/events", "/telemetry"),
                 camera_id=args.camera_id,
@@ -434,6 +449,8 @@ def main():
                 active_tracks=len(detections),
                 zone_polygon=zone_polygon_norm,
                 poses=latest_poses,
+                sensor_mode=args.sensor_mode if args.sensor_mode != "optical" else None,
+                mean_brightness=mean_brightness,
             )
 
         cv2.putText(

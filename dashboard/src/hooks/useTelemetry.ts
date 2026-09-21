@@ -16,6 +16,8 @@ export interface Telemetry {
   active_tracks: number
   zone_polygon: [number, number][]
   poses?: PoseData[]
+  mean_brightness?: number
+  sensor_mode?: 'thermal' | null
 }
 
 /**

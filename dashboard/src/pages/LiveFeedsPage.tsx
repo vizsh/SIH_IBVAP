@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Camera } from 'lucide-react'
+import { Camera, Flame } from 'lucide-react'
 import { EvidenceThumbnail } from '@/components/console/EvidenceThumbnail'
 import { MultiSensorOscilloscope } from '@/components/console/MultiSensorOscilloscope'
 import { VideoPane } from '@/components/VideoPane'
@@ -23,7 +23,8 @@ function timeAgo(iso: string): string {
 }
 
 export default function LiveFeedsPage() {
-  const [cameras, setCameras] = useState<string[]>(['BOP-01'])
+  const [cameras, setCameras] = useState<string[]>(['BOP-01', 'BOP-Sentry-Thermal'])
+  const [selectedCamera, setSelectedCamera] = useState('BOP-01')
   const [evidence, setEvidence] = useState<IbvapEvent[]>([])
 
   useEffect(() => {
@@ -44,22 +45,31 @@ export default function LiveFeedsPage() {
       </header>
 
       <div className="mb-6 h-[420px]">
-        <VideoPane cameraId="BOP-01" />
+        <VideoPane cameraId={selectedCamera} />
       </div>
 
       <div className="mb-6">
-        <MultiSensorOscilloscope cameraId="BOP-01" />
+        <MultiSensorOscilloscope cameraId={selectedCamera} />
       </div>
 
       <div className="mb-3 flex items-center gap-2">
         <Camera size={14} className="text-cyan-400" />
-        <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Known cameras this session</span>
+        <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Known cameras this session — click to view</span>
       </div>
       <div className="mb-6 flex flex-wrap gap-2">
         {cameras.map((c) => (
-          <span key={c} className="rounded-full border border-zinc-800 bg-zinc-900/60 px-3 py-1 text-xs text-zinc-400">
+          <button
+            key={c}
+            onClick={() => setSelectedCamera(c)}
+            className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ${
+              c === selectedCamera
+                ? 'border-cyan-600 bg-cyan-500/15 text-cyan-300'
+                : 'border-zinc-800 bg-zinc-900/60 text-zinc-400 hover:bg-zinc-800/60'
+            }`}
+          >
+            {c === 'BOP-Sentry-Thermal' && <Flame size={11} className="text-orange-400" />}
             {c}
-          </span>
+          </button>
         ))}
       </div>
 
