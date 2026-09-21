@@ -1,4 +1,5 @@
 import { CoverageMap } from '@/components/console/CoverageMap'
+import { DemoScenarioButton } from '@/components/console/DemoScenarioButton'
 import { GlowingEffect } from '@/components/glowing-effect'
 
 const STATS = [
@@ -29,6 +30,10 @@ export default function CoveragePage() {
             <div className="relative z-10 text-[10px] text-zinc-600">{s.sub}</div>
           </div>
         ))}
+      </div>
+
+      <div className="mb-4">
+        <DemoScenarioButton />
       </div>
 
       <div className="mb-4 h-[480px] overflow-hidden rounded-xl border border-zinc-800">

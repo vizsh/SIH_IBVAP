@@ -145,7 +145,11 @@ export function CoverageMap() {
     }
     refresh()
     const interval = setInterval(refresh, 4000)
-    return () => clearInterval(interval)
+    window.addEventListener('ibvap:events-refresh', refresh)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('ibvap:events-refresh', refresh)
+    }
   }, [])
 
   // Pulse clock for alert cones / rings — deck.gl layers are cheap to

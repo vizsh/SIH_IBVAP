@@ -54,6 +54,22 @@ export async function saveFence(cameraId: string, polygon: [number, number][]): 
   return res.json()
 }
 
+// Posts a real event through the same /events contract the edge pipeline
+// uses — audit-logged, WS-broadcast, confidence-tiered, everything the
+// pipeline's own events get. Used only by clearly-labeled "Simulate
+// ..." / "Demo ..." UI controls (same honesty pattern as the existing
+// tamper-simulation and offline-BOP-simulation buttons): a scripted
+// showcase trigger, never disguised as an undetected real intrusion.
+export async function postDemoEvent(payload: Record<string, unknown>): Promise<IbvapEvent> {
+  const res = await fetch(`${API_BASE}/events`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error('failed to post demo event')
+  return res.json()
+}
+
 export function wsUrl(): string {
   if (API_ORIGIN) {
     const proto = API_ORIGIN.startsWith('https') ? 'wss' : 'ws'
