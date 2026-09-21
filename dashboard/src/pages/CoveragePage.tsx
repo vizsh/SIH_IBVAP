@@ -1,5 +1,6 @@
 import { CoverageMap } from '@/components/console/CoverageMap'
 import { DemoScenarioButton } from '@/components/console/DemoScenarioButton'
+import { DistrictRiskMatrix } from '@/components/console/DistrictRiskMatrix'
 import { GlowingEffect } from '@/components/glowing-effect'
 
 const STATS = [
@@ -38,6 +39,10 @@ export default function CoveragePage() {
 
       <div className="mb-4 h-[480px] overflow-hidden rounded-xl border border-zinc-800">
         <CoverageMap />
+      </div>
+
+      <div className="mb-4">
+        <DistrictRiskMatrix />
       </div>
 
       <div className="flex flex-wrap items-center gap-4 rounded-xl border border-zinc-800/60 bg-zinc-950/40 px-4 py-3 text-xs text-zinc-400">
