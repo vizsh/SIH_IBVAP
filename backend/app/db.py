@@ -50,6 +50,26 @@ class CameraFence(Base):
     updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
 
+class PointOfInterest(Base):
+    """A Named Area of Interest (NAI) — a location intelligence has flagged
+    as a suspected smuggling staging point, historical seizure site, or
+    unmonitored crossing. Deliberately analyst-curated, never AI-detected:
+    no camera or model here can infer "this is a hideout" from video, so
+    this table only ever gets rows an operator explicitly submits, each one
+    audit-logged the same way a fence edit or event review is."""
+
+    __tablename__ = "points_of_interest"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    category = Column(String, nullable=False)  # suspected_staging_point | historical_seizure | unmonitored_crossing | unverified_tip | other
+    lat = Column(Float, nullable=False)
+    lng = Column(Float, nullable=False)
+    source = Column(String, nullable=False)  # humint | pattern_of_life | historical_record | unverified
+    notes = Column(String, nullable=True)
+    created_at = Column(DateTime, default=utcnow)
+
+
 class AuditEntry(Base):
     __tablename__ = "audit_log"
 

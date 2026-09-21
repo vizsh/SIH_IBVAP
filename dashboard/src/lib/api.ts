@@ -70,6 +70,38 @@ export async function postDemoEvent(payload: Record<string, unknown>): Promise<I
   return res.json()
 }
 
+export interface PointOfInterest {
+  id: number
+  name: string
+  category: 'suspected_staging_point' | 'historical_seizure' | 'unmonitored_crossing' | 'unverified_tip' | 'other'
+  lat: number
+  lng: number
+  source: 'humint' | 'pattern_of_life' | 'historical_record' | 'unverified'
+  notes: string | null
+  created_at: string
+}
+
+export async function fetchPOIs(): Promise<PointOfInterest[]> {
+  const res = await fetch(`${API_BASE}/poi`)
+  if (!res.ok) throw new Error('failed to fetch points of interest')
+  return res.json()
+}
+
+export async function createPOI(payload: Omit<PointOfInterest, 'id' | 'created_at'>): Promise<PointOfInterest> {
+  const res = await fetch(`${API_BASE}/poi`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error('failed to create point of interest')
+  return res.json()
+}
+
+export async function deletePOI(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/poi/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('failed to delete point of interest')
+}
+
 export function wsUrl(): string {
   if (API_ORIGIN) {
     const proto = API_ORIGIN.startsWith('https') ? 'wss' : 'ws'

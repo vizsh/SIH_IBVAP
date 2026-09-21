@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from . import audit, confidence, correlation, db as dbm
-from .schemas import EventIn, EventOut, EventType, FenceIn, FenceOut, ReviewAction, TelemetryIn
+from .schemas import EventIn, EventOut, EventType, FenceIn, FenceOut, POIIn, POIOut, ReviewAction, TelemetryIn
 from .ws_manager import manager
 
 app = FastAPI(title="IBVAP Backend", version="0.1.0")
@@ -246,6 +246,41 @@ async def set_fence(camera_id: str, fence: FenceIn, db: Session = Depends(dbm.ge
     await manager.broadcast({"type": "fence_updated", "data": {"camera_id": camera_id, "polygon": fence.polygon}})
 
     return FenceOut(camera_id=row.camera_id, polygon=fence.polygon, updated_at=row.updated_at)
+
+
+@app.get("/poi", response_model=list[POIOut])
+def list_poi(db: Session = Depends(dbm.get_db)):
+    return db.query(dbm.PointOfInterest).order_by(dbm.PointOfInterest.id.desc()).all()
+
+
+@app.post("/poi", response_model=POIOut)
+async def create_poi(poi: POIIn, db: Session = Depends(dbm.get_db)):
+    row = dbm.PointOfInterest(name=poi.name, category=poi.category.value, lat=poi.lat, lng=poi.lng, source=poi.source.value, notes=poi.notes)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+
+    audit_entry = audit.append_entry(
+        db, action="poi_created", detail=f"NAI '{poi.name}' marked ({poi.category.value}, source: {poi.source.value})"
+    )
+    await _broadcast_audit(audit_entry)
+    await manager.broadcast({"type": "poi_created", "data": POIOut.model_validate(row).model_dump(mode="json")})
+    return row
+
+
+@app.delete("/poi/{poi_id}")
+async def delete_poi(poi_id: int, db: Session = Depends(dbm.get_db)):
+    row = db.query(dbm.PointOfInterest).filter(dbm.PointOfInterest.id == poi_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="point of interest not found")
+    name = row.name
+    db.delete(row)
+    db.commit()
+
+    audit_entry = audit.append_entry(db, action="poi_deleted", detail=f"NAI '{name}' (id {poi_id}) removed")
+    await _broadcast_audit(audit_entry)
+    await manager.broadcast({"type": "poi_deleted", "data": {"id": poi_id}})
+    return {"ok": True}
 
 
 @app.get("/audit")

@@ -125,6 +125,43 @@ class FenceOut(FenceIn):
         from_attributes = True
 
 
+class POICategory(str, Enum):
+    suspected_staging_point = "suspected_staging_point"
+    historical_seizure = "historical_seizure"
+    unmonitored_crossing = "unmonitored_crossing"
+    unverified_tip = "unverified_tip"
+    other = "other"
+
+
+class POISource(str, Enum):
+    humint = "humint"
+    pattern_of_life = "pattern_of_life"
+    historical_record = "historical_record"
+    unverified = "unverified"
+
+
+class POIIn(BaseModel):
+    """A Named Area of Interest an analyst places on the map — never
+    auto-generated. category/source are deliberately plain enums an
+    operator picks, not a confidence score, since there's no model output
+    behind this to score."""
+
+    name: str
+    category: POICategory
+    lat: float
+    lng: float
+    source: POISource
+    notes: Optional[str] = None
+
+
+class POIOut(POIIn):
+    id: int
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class AuditEntryOut(BaseModel):
     id: int
     event_id: Optional[int]
