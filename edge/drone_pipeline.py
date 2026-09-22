@@ -234,6 +234,13 @@ def main():
                 active_tracks=len(detections),
                 zone_polygon=[],  # geo-fence, not a fixed pixel-space polygon — nothing meaningful to draw here
                 sensor_mode="drone_simulated_telemetry",
+                lat=drone.lat,
+                lng=drone.lng,
+                alt_m=drone.alt_m,
+                heading_deg=drone.heading_deg,
+                gimbal_pitch_deg=drone.gimbal_pitch_deg,
+                hfov_deg=cam.hfov_deg,
+                vfov_deg=cam.vfov_deg,
             )
 
         if args.stream_port or pending_evidence:

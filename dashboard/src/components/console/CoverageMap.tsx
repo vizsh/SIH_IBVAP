@@ -9,6 +9,8 @@ import { Building2, LayoutGrid, MapPinPlus, Satellite, Trash2, X } from 'lucide-
 import { createPOI, deletePOI, fetchPOIs, type PointOfInterest } from '@/lib/api'
 import { API_BASE } from '@/lib/api'
 import { buildCheckpointStructure, CAMERA_SITES, destinationPoint, fovConeLngLat, siteFor } from '@/lib/cameraSites'
+import { droneFootprintLngLat } from '@/lib/droneProjection'
+import type { Telemetry } from '@/hooks/useTelemetry'
 import type { IbvapEvent } from '@/types'
 
 // Free, keyless MapLibre-compatible vector style (OpenFreeMap) — CARTO's
@@ -29,6 +31,10 @@ const CONE_RANGE_M = 22000
 const CONE_HEIGHT_M = 3500
 const RETICLE_RANGE_M = 4000
 const GRID_BOUNDS = { minLat: 24.5, maxLat: 28.5, minLng: 83.5, maxLng: 89.5, step: 0.5 }
+const DRONE_TRAIL_MAX = 40
+const DRONE_FOOTPRINT_HEIGHT_M = 40
+
+type TelemetrySnapshot = Telemetry & { received_at: number }
 
 type CameraStatus = 'live' | 'armed' | 'unmonitored'
 
@@ -121,7 +127,8 @@ export function CoverageMap() {
   const markingModeRef = useRef(false)
 
   const [ready, setReady] = useState(false)
-  const [telemetry, setTelemetry] = useState<Record<string, { received_at: number }>>({})
+  const [telemetry, setTelemetry] = useState<Record<string, TelemetrySnapshot>>({})
+  const droneTrails = useRef<Record<string, [number, number][]>>({})
   const [events, setEvents] = useState<IbvapEvent[]>([])
   const [pois, setPois] = useState<PointOfInterest[]>([])
   const [pulsePhase, setPulsePhase] = useState(0)
@@ -214,8 +221,31 @@ export function CoverageMap() {
     return () => clearInterval(id)
   }, [])
 
+  // A camera counted as a drone (real per-frame position/heading from
+  // simulated telemetry) never gets a fixed-site marker/cone — that fixed
+  // site is a fallback lat/lng for a camera_id siteFor() has never heard
+  // of, and would draw a fake static cone next to the moving real one.
+  const droneCameraIds = useMemo(() => {
+    const ids = new Set<string>()
+    events.forEach((e) => {
+      if (e.sensor_mode === 'drone_simulated_telemetry') ids.add(e.camera_id)
+    })
+    Object.entries(telemetry).forEach(([id, t]) => {
+      if (t.sensor_mode === 'drone_simulated_telemetry') ids.add(id)
+    })
+    return ids
+  }, [events, telemetry])
+
+  const droneCameras = useMemo(() => {
+    const now = Date.now() / 1000
+    return Object.entries(telemetry)
+      .filter(([id, t]) => droneCameraIds.has(id) && now - t.received_at < LIVE_THRESHOLD_SECONDS && t.lat != null && t.lng != null)
+      .map(([camera_id, t]) => ({ camera_id, t }))
+  }, [telemetry, droneCameraIds])
+
   const cameras = useMemo(() => {
     const seen = new Set<string>([...Object.keys(CAMERA_SITES), ...events.map((e) => e.camera_id)])
+    droneCameraIds.forEach((id) => seen.delete(id))
     const now = Date.now() / 1000
     const nowMs = Date.now()
     return Array.from(seen).map((camera_id) => {
@@ -234,7 +264,7 @@ export function CoverageMap() {
 
       return { camera_id, status, alerting, site: siteFor(camera_id), eventCount: events.filter((e) => e.camera_id === camera_id).length }
     })
-  }, [events, telemetry])
+  }, [events, telemetry, droneCameraIds])
 
   // Fly to the newest high-tier alert's camera the moment it arrives.
   useEffect(() => {
@@ -243,9 +273,30 @@ export function CoverageMap() {
     const latestHigh = events.find((e) => e.confidence_tier === 'high')
     if (!latestHigh || latestHigh.id === lastFlownId.current) return
     lastFlownId.current = latestHigh.id
-    const site = siteFor(latestHigh.camera_id)
-    map.flyTo({ center: [site.lng, site.lat], zoom: Math.max(map.getZoom(), 10.5), pitch: 60, duration: 1600 })
+    const center: [number, number] =
+      latestHigh.sensor_mode === 'drone_simulated_telemetry' && latestHigh.detected_lat != null && latestHigh.detected_lng != null
+        ? [latestHigh.detected_lng, latestHigh.detected_lat]
+        : (() => {
+            const site = siteFor(latestHigh.camera_id)
+            return [site.lng, site.lat]
+          })()
+    map.flyTo({ center, zoom: Math.max(map.getZoom(), 10.5), pitch: 60, duration: 1600 })
   }, [events, ready])
+
+  // Accumulate a short trail of each live drone's real recent ground
+  // positions, so the moving footprint reads as motion rather than a
+  // cone that just teleports between telemetry polls.
+  useEffect(() => {
+    droneCameras.forEach(({ camera_id, t }) => {
+      const trail = droneTrails.current[camera_id] ?? []
+      const last = trail[trail.length - 1]
+      if (!last || last[0] !== t.lng || last[1] !== t.lat) {
+        trail.push([t.lng!, t.lat!])
+        if (trail.length > DRONE_TRAIL_MAX) trail.shift()
+        droneTrails.current[camera_id] = trail
+      }
+    })
+  }, [droneCameras])
 
   async function submitPOI(form: { name: string; category: PointOfInterest['category']; source: PointOfInterest['source']; notes: string }) {
     if (!pendingPoint) return
@@ -416,13 +467,97 @@ export function CoverageMap() {
     })
 
     const alertingCam = cameras.find((c) => c.alerting)
+    const alertingDroneEvent = events.find(
+      (e) =>
+        e.sensor_mode === 'drone_simulated_telemetry' &&
+        e.confidence_tier === 'high' &&
+        e.detected_lat != null &&
+        e.detected_lng != null &&
+        Date.now() - new Date(e.created_at + 'Z').getTime() < ALERT_WINDOW_SECONDS * 1000,
+    )
+    const reticleTarget = alertingCam
+      ? { lat: alertingCam.site.lat, lng: alertingCam.site.lng }
+      : alertingDroneEvent
+        ? { lat: alertingDroneEvent.detected_lat!, lng: alertingDroneEvent.detected_lng! }
+        : null
     const reticleLayer = new LineLayer({
       id: 'target-reticle',
-      data: alertingCam ? reticleBracketSegments(alertingCam.site.lat, alertingCam.site.lng, RETICLE_RANGE_M, (pulsePhase / 100) * 360) : [],
+      data: reticleTarget ? reticleBracketSegments(reticleTarget.lat, reticleTarget.lng, RETICLE_RANGE_M, (pulsePhase / 100) * 360) : [],
       getSourcePosition: (d: [number, number][]) => d[0],
       getTargetPosition: (d: [number, number][]) => d[1],
       getColor: [255, 255, 255, 230],
       getWidth: 2.5,
+    })
+
+    // The drone's real ground footprint — the actual camera-corner
+    // ray-cast (droneProjection.ts, mirroring edge/geo_projection.py), not
+    // a stylized cone: it changes shape with heading/gimbal pitch exactly
+    // like the edge pipeline's own geo-fence check reasons about it.
+    const droneFootprints = droneCameras
+      .map(({ camera_id, t }) => {
+        const footprint = droneFootprintLngLat(
+          { lat: t.lat!, lng: t.lng!, altM: t.alt_m ?? 100, headingDeg: t.heading_deg ?? 0, gimbalPitchDeg: t.gimbal_pitch_deg ?? 0 },
+          { hfovDeg: t.hfov_deg ?? 80, vfovDeg: t.vfov_deg ?? 52 },
+        )
+        return footprint ? { camera_id, footprint } : null
+      })
+      .filter((d): d is { camera_id: string; footprint: [number, number][] } => d !== null)
+
+    const droneFootprintLayer = new PolygonLayer({
+      id: 'drone-fov-footprint',
+      data: droneFootprints,
+      getPolygon: (d) => d.footprint.map(([lng, lat]) => [lng, lat, DRONE_FOOTPRINT_HEIGHT_M * (0.6 + 0.4 * pulse)]),
+      extruded: true,
+      wireframe: true,
+      getFillColor: [56, 189, 248, 55 + pulseFast * 20],
+      getLineColor: [125, 211, 252, 210],
+      lineWidthMinPixels: 1.5,
+      pickable: false,
+      updateTriggers: { getPolygon: [pulsePhase], getFillColor: [pulsePhase] },
+    })
+
+    const droneTrailLayer = new LineLayer({
+      id: 'drone-trail',
+      data: droneCameras.flatMap(({ camera_id }) => {
+        const trail = droneTrails.current[camera_id] ?? []
+        return trail.slice(1).map((pos, i) => ({ from: trail[i], to: pos }))
+      }),
+      getSourcePosition: (d) => d.from,
+      getTargetPosition: (d) => d.to,
+      getColor: [56, 189, 248, 140],
+      getWidth: 1.5,
+    })
+
+    const droneMarkerLayer = new ScatterplotLayer({
+      id: 'drone-position',
+      data: droneCameras,
+      getPosition: (d) => [d.t.lng!, d.t.lat!],
+      getRadius: 350 + pulse * 100,
+      getFillColor: [56, 189, 248, 235],
+      getLineColor: [8, 47, 73, 255],
+      stroked: true,
+      lineWidthMinPixels: 2,
+      radiusMinPixels: 6,
+      updateTriggers: { getRadius: [pulsePhase] },
+      pickable: true,
+      onClick: (info) => {
+        const d = info.object as (typeof droneCameras)[number] | undefined
+        if (d) setSelected({ camera_id: d.camera_id, label: `Drone (sim. telemetry) · alt ${Math.round(d.t.alt_m ?? 0)}m`, status: 'live', alerting: false })
+      },
+    })
+
+    const droneLabelLayer = new TextLayer({
+      id: 'drone-labels',
+      data: droneCameras,
+      getPosition: (d) => [d.t.lng!, d.t.lat!],
+      getText: (d) => `${d.camera_id} · ${Math.round(d.t.alt_m ?? 0)}m AGL`,
+      getSize: 11,
+      getColor: [125, 211, 252, 230],
+      getPixelOffset: [0, -18],
+      fontFamily: 'monospace',
+      fontSettings: { sdf: true },
+      outlineWidth: 2,
+      outlineColor: [5, 7, 12, 255],
     })
 
     const gridLayer = new LineLayer({
@@ -469,9 +604,26 @@ export function CoverageMap() {
     })
 
     overlayRef.current.setProps({
-      layers: [gridLayer, heatLayer, towerLayer, cabinLayer, fenceLayer, gateLayer, coneLayer, ringLayer, markerLayer, poiLayer, poiLabelLayer, reticleLayer],
+      layers: [
+        gridLayer,
+        heatLayer,
+        towerLayer,
+        cabinLayer,
+        fenceLayer,
+        gateLayer,
+        coneLayer,
+        droneFootprintLayer,
+        droneTrailLayer,
+        ringLayer,
+        markerLayer,
+        droneMarkerLayer,
+        droneLabelLayer,
+        poiLayer,
+        poiLabelLayer,
+        reticleLayer,
+      ],
     })
-  }, [cameras, events, pois, pulsePhase, showGrid, showStructures])
+  }, [cameras, droneCameras, events, pois, pulsePhase, showGrid, showStructures])
 
   return (
     <div className="relative h-full w-full overflow-hidden rounded-xl border border-zinc-800 bg-[#05070c]">

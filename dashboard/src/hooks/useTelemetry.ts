@@ -17,7 +17,20 @@ export interface Telemetry {
   zone_polygon: [number, number][]
   poses?: PoseData[]
   mean_brightness?: number
-  sensor_mode?: 'thermal' | null
+  sensor_mode?: 'thermal' | 'drone_simulated_telemetry' | null
+
+  // Present only on a geo-referenced (drone) camera's telemetry push — the
+  // real simulated flight state (see edge/synthetic_telemetry.py) plus the
+  // camera intrinsics used for its geo-projection (edge/geo_projection.py),
+  // so the coverage map can draw the camera's actual ground footprint
+  // instead of a fixed site's static cone. Absent for every fixed camera.
+  lat?: number | null
+  lng?: number | null
+  alt_m?: number | null
+  heading_deg?: number | null
+  gimbal_pitch_deg?: number | null
+  hfov_deg?: number | null
+  vfov_deg?: number | null
 }
 
 /**

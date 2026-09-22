@@ -114,7 +114,20 @@ class TelemetryIn(BaseModel):
     # co-located thermal sensor exists for any optical camera here, so this
     # is reported as real telemetry rather than wired to a fake auto-switch.
     mean_brightness: Optional[float] = None
-    sensor_mode: Optional[str] = None  # "thermal" | None
+    sensor_mode: Optional[str] = None  # "thermal" | "drone_simulated_telemetry" | None
+
+    # Set only by a geo-referenced (drone) camera: the real simulated flight
+    # state behind this frame (see edge/synthetic_telemetry.py) plus the
+    # camera intrinsics used for its geo-projection, so the dashboard's map
+    # can draw the camera's actual ground footprint instead of a fixed
+    # site's static cone. None for every ordinary fixed camera.
+    lat: Optional[float] = None
+    lng: Optional[float] = None
+    alt_m: Optional[float] = None
+    heading_deg: Optional[float] = None
+    gimbal_pitch_deg: Optional[float] = None
+    hfov_deg: Optional[float] = None
+    vfov_deg: Optional[float] = None
 
 
 class FenceIn(BaseModel):
