@@ -93,7 +93,10 @@ cameras_start() {
       continue
     fi
     local log="$LOG_DIR/$(echo "$cam" | tr '[:upper:]' '[:lower:]').log"
-    ( cd "$EDGE_DIR" && "$EDGE_PY" pipeline.py --source "$src" --camera-id "$cam" --stream-port "$port" --loop --backend "http://127.0.0.1:$BACKEND_PORT/events" $extra > "$log" 2>&1 & )
+    # -u: unbuffered stdout — without it, Python fully-buffers print() when
+    # stdout isn't a TTY, so the log file stays empty for a long time even
+    # though the process is genuinely running (found during a cold-start check).
+    ( cd "$EDGE_DIR" && "$EDGE_PY" -u pipeline.py --source "$src" --camera-id "$cam" --stream-port "$port" --loop --backend "http://127.0.0.1:$BACKEND_PORT/events" $extra > "$log" 2>&1 & )
     echo "  started $cam (port $port) — log: $log"
     sleep 1
   done
@@ -106,10 +109,27 @@ cameras_stop() {
   done
 }
 
+reset_demo_data() {
+  echo "Stopping everything before reset..."
+  cameras_stop
+  backend_stop
+  sleep 1
+  "$BACKEND_PY" "$ROOT/backend/reset_demo_data.py"
+  echo "Restarting fresh..."
+  backend_start
+  cameras_start
+}
+
 usage() {
   echo "Usage: $0 {backend|cameras|all} {start|stop|restart|status}"
+  echo "       $0 reset          — wipe accumulated events/audit log for a clean judge-ready state, then restart"
   exit 1
 }
+
+if [ "${1:-}" = "reset" ]; then
+  reset_demo_data
+  exit 0
+fi
 
 [ $# -eq 2 ] || usage
 target="$1"

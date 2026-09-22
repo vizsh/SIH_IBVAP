@@ -80,7 +80,11 @@ export function FenceEditor({ cameraId }: { cameraId: string }) {
   }
 
   const isDirty = JSON.stringify(points) !== JSON.stringify(savedPoints ?? DEFAULT_ZONE)
-  const polygonPx = points.map(([x, y]) => `${x * 100}%,${y * 100}%`).join(' ')
+  // SVG's `points` attribute takes unitless numbers, not percentages — the
+  // viewBox is already 0-100, so plain 0-100 values line up exactly with
+  // what a "%" would have meant, without the invalid syntax the browser
+  // was silently choking on.
+  const polygonPx = points.map(([x, y]) => `${x * 100},${y * 100}`).join(' ')
 
   return (
     <div className="flex flex-col gap-3">
