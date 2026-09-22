@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 
 from . import audit, confidence, correlation, db as dbm
-from .schemas import EventIn, EventOut, EventType, FenceIn, FenceOut, POIIn, POIOut, ReviewAction, TelemetryIn
+from .schemas import EventIn, EventOut, EventType, FenceIn, FenceOut, OverflightDispatchIn, POIIn, POIOut, ReviewAction, TelemetryIn
 from .ws_manager import manager
 
 app = FastAPI(title="IBVAP Backend", version="0.1.0")
@@ -325,6 +325,21 @@ async def delete_poi(poi_id: int, db: Session = Depends(dbm.get_db)):
     audit_entry = audit.append_entry(db, action="poi_deleted", detail=f"NAI '{name}' (id {poi_id}) removed")
     await _broadcast_audit(audit_entry)
     await manager.broadcast({"type": "poi_deleted", "data": {"id": poi_id}})
+    return {"ok": True}
+
+
+@app.post("/dispatch/overflight")
+async def acknowledge_overflight_dispatch(dispatch: OverflightDispatchIn, db: Session = Depends(dbm.get_db)):
+    """An operator acting on the coverage map's risk-triggered drone
+    overflight recommendation — audit-logged like any other analyst
+    action, never an automated dispatch: no real drone fleet exists on
+    this platform to actually command."""
+    audit_entry = audit.append_entry(
+        db,
+        action="overflight_dispatch_acknowledged",
+        detail=f"{dispatch.zone_name}: operator acknowledged overflight recommendation (R_Z={dispatch.risk_index:.2f}, coverage {dispatch.coverage_pct:.1f}%)",
+    )
+    await _broadcast_audit(audit_entry)
     return {"ok": True}
 
 

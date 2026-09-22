@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, MapPin, ShieldAlert, ShieldCheck } from 'lucide-react'
-import { API_BASE, fetchPOIs, type PointOfInterest } from '@/lib/api'
-import { computeZoneRisks, type RiskLevel, type ZoneRisk } from '@/lib/riskIndex'
+import { AlertTriangle, CheckCircle2, MapPin, Plane, ShieldAlert, ShieldCheck } from 'lucide-react'
+import { acknowledgeOverflightDispatch, API_BASE, fetchPOIs, type PointOfInterest } from '@/lib/api'
+import { computeZoneRisks, shouldRecommendOverflight, type RiskLevel, type ZoneRisk } from '@/lib/riskIndex'
 import type { IbvapEvent } from '@/types'
 
 const LEVEL_STYLE: Record<RiskLevel, { border: string; bg: string; text: string; label: string; icon: typeof ShieldCheck; pulse: boolean }> = {
@@ -13,6 +13,27 @@ const LEVEL_STYLE: Record<RiskLevel, { border: string; bg: string; text: string;
 function ZoneCard({ risk }: { risk: ZoneRisk }) {
   const style = LEVEL_STYLE[risk.riskLevel]
   const Icon = style.icon
+  const recommend = shouldRecommendOverflight(risk)
+  const [acking, setAcking] = useState(false)
+  const [acked, setAcked] = useState(false)
+
+  async function acknowledge() {
+    setAcking(true)
+    try {
+      await acknowledgeOverflightDispatch({
+        zone_id: risk.zone.id,
+        zone_name: risk.zone.name,
+        risk_index: risk.riskIndex,
+        coverage_pct: risk.coveragePct,
+      })
+      setAcked(true)
+    } catch {
+      // best-effort — the operator can retry; nothing else depends on this succeeding
+    } finally {
+      setAcking(false)
+    }
+  }
+
   return (
     <div className={`rounded-xl border ${style.border} ${style.bg} p-3`}>
       <div className="flex items-start justify-between gap-2">
@@ -54,6 +75,31 @@ function ZoneCard({ risk }: { risk: ZoneRisk }) {
           <div>
             NAI markings: <span className="text-zinc-300">{risk.naiCount}</span>
           </div>
+        </div>
+      )}
+
+      {recommend && (
+        <div className="mt-3 rounded-lg border border-sky-800/50 bg-sky-950/20 p-2">
+          <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-sky-400">
+            <Plane size={11} /> Recommend drone overflight
+          </div>
+          <div className="mt-1 text-[10px] text-zinc-500">
+            Fixed-camera coverage here is thin ({risk.coveragePct}%) relative to the zone's risk — a geo-referenced drone
+            pass can close that gap faster than a new fixed install.
+          </div>
+          {acked ? (
+            <div className="mt-2 flex items-center gap-1.5 text-[10px] font-semibold text-emerald-400">
+              <CheckCircle2 size={11} /> Acknowledged — logged to audit trail
+            </div>
+          ) : (
+            <button
+              onClick={acknowledge}
+              disabled={acking}
+              className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-sky-700/60 bg-sky-500/10 px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-sky-300 hover:bg-sky-500/20 disabled:opacity-50"
+            >
+              <Plane size={11} /> {acking ? 'Logging…' : 'Acknowledge & log dispatch'}
+            </button>
+          )}
         </div>
       )}
     </div>

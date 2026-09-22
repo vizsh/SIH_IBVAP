@@ -71,6 +71,14 @@ const NAI_WEIGHT = 3 // one analyst-marked NAI ~ 3 "effective incidents" of sign
 const CONE_RANGE_M = 22000 // must match CoverageMap's CONE_RANGE_M
 const THIRTY_DAYS_MS = 30 * 24 * 3600 * 1000
 
+// A drone overflight is worth recommending when the fixed-camera picture
+// for a zone is both risky and thin — critical risk on its own, or medium
+// risk compounded by a real coverage gap (this platform's own FoV-cone
+// union barely touching the district), not a fixed risk-index cutoff
+// alone. Thresholds chosen from the same %C_Z the risk formula already
+// computes, not a separate invented signal.
+const OVERFLIGHT_MEDIUM_COVERAGE_CEILING_PCT = 10
+
 export type RiskLevel = 'low' | 'medium' | 'critical'
 
 export interface ZoneRisk {
@@ -96,6 +104,12 @@ const districtBoundaries = districtBoundariesRaw as unknown as { type: 'FeatureC
 
 function findDistrict(name: string): DistrictFeature | undefined {
   return districtBoundaries.features.find((f) => f.properties.NAME_2 === name)
+}
+
+export function shouldRecommendOverflight(risk: ZoneRisk): boolean {
+  if (!risk.hasDistrictData) return false
+  if (risk.riskLevel === 'critical') return true
+  return risk.riskLevel === 'medium' && risk.coveragePct < OVERFLIGHT_MEDIUM_COVERAGE_CEILING_PCT
 }
 
 export function computeZoneRisks(events: IbvapEvent[], pois: PointOfInterest[]): ZoneRisk[] {

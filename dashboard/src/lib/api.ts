@@ -102,6 +102,18 @@ export async function deletePOI(id: number): Promise<void> {
   if (!res.ok) throw new Error('failed to delete point of interest')
 }
 
+// Logs an operator's acknowledgment of the coverage map's risk-triggered
+// drone overflight recommendation — an audited analyst action, never an
+// automated dispatch (no real drone fleet exists here to command).
+export async function acknowledgeOverflightDispatch(payload: { zone_id: string; zone_name: string; risk_index: number; coverage_pct: number }): Promise<void> {
+  const res = await fetch(`${API_BASE}/dispatch/overflight`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error('failed to acknowledge overflight dispatch')
+}
+
 export function wsUrl(): string {
   if (API_ORIGIN) {
     const proto = API_ORIGIN.startsWith('https') ? 'wss' : 'ws'

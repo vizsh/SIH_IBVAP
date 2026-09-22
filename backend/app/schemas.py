@@ -185,6 +185,20 @@ class POIOut(POIIn):
         from_attributes = True
 
 
+class OverflightDispatchIn(BaseModel):
+    """An operator acknowledging the dashboard's risk-triggered drone
+    overflight recommendation for a district zone — never an automated
+    dispatch (no real drone fleet exists for this platform to command), so
+    this is logged as an analyst action, same honesty stance as an NAI
+    marking. The risk numbers travel with the ack so the audit trail
+    records exactly what the operator was looking at when they acted."""
+
+    zone_id: str
+    zone_name: str
+    risk_index: float
+    coverage_pct: float
+
+
 class AuditEntryOut(BaseModel):
     id: int
     event_id: Optional[int]
