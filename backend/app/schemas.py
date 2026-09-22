@@ -62,7 +62,17 @@ class EventIn(BaseModel):
     # never inferred, never defaulted to "thermal" for an ordinary RGB
     # camera. Lets the dashboard show a THERMAL badge instead of silently
     # presenting IR-sourced detections as if they were optical.
-    sensor_mode: Optional[str] = None  # "thermal" | None (omitted = ordinary optical camera)
+    sensor_mode: Optional[str] = None  # "thermal" | "drone_simulated_telemetry" | None
+
+    # Set only on events from a geo-referenced (drone) camera: the real
+    # computed ground-GPS estimate of the detection (pinhole-camera ray
+    # cast to a flat local ground plane — see edge/geo_projection.py),
+    # plus the telemetry state that produced it. Never present for a fixed
+    # camera, which has no per-frame position/orientation to project from.
+    detected_lat: Optional[float] = None
+    detected_lng: Optional[float] = None
+    drone_alt_m: Optional[float] = None
+    drone_heading_deg: Optional[float] = None
 
 
 class EventOut(EventIn):

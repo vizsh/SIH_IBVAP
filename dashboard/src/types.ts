@@ -32,7 +32,17 @@ export interface IbvapEvent {
   from_camera_id: string | null
   ocr_samples: OcrSample[] | null
   trail: TrailPoint[] | null
-  sensor_mode: 'thermal' | null
+  sensor_mode: 'thermal' | 'drone_simulated_telemetry' | null
+
+  // Only present on drone_simulated_telemetry events: the real computed
+  // ground-GPS estimate of the detection (pinhole-camera ray cast to a
+  // flat ground plane — see edge/geo_projection.py), plus the telemetry
+  // state that produced it. A fixed camera has no per-frame position to
+  // project from, so these stay null for every ordinary event.
+  detected_lat: number | null
+  detected_lng: number | null
+  drone_alt_m: number | null
+  drone_heading_deg: number | null
 }
 
 export interface TrailPoint {

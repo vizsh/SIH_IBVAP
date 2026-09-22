@@ -38,7 +38,11 @@ class Event(Base):
     from_camera_id = Column(String, nullable=True)
     ocr_samples_json = Column(String, nullable=True)  # JSON-encoded list[dict]
     trail_json = Column(String, nullable=True)  # JSON-encoded list[{x, y, t}]
-    sensor_mode = Column(String, nullable=True)  # "thermal" | None
+    sensor_mode = Column(String, nullable=True)  # "thermal" | "drone_simulated_telemetry" | None
+    detected_lat = Column(Float, nullable=True)
+    detected_lng = Column(Float, nullable=True)
+    drone_alt_m = Column(Float, nullable=True)
+    drone_heading_deg = Column(Float, nullable=True)
     created_at = Column(DateTime, default=utcnow)
 
 

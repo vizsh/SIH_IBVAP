@@ -96,6 +96,10 @@ def _event_out(row: dbm.Event) -> EventOut:
         ocr_samples=json.loads(row.ocr_samples_json) if row.ocr_samples_json else None,
         trail=json.loads(row.trail_json) if row.trail_json else None,
         sensor_mode=row.sensor_mode,
+        detected_lat=row.detected_lat,
+        detected_lng=row.detected_lng,
+        drone_alt_m=row.drone_alt_m,
+        drone_heading_deg=row.drone_heading_deg,
     )
 
 
@@ -171,6 +175,10 @@ async def create_event(event: EventIn, db: Session = Depends(dbm.get_db)):
         ocr_samples_json=json.dumps(event.ocr_samples) if event.ocr_samples else None,
         trail_json=json.dumps(event.trail) if event.trail else None,
         sensor_mode=event.sensor_mode,
+        detected_lat=event.detected_lat,
+        detected_lng=event.detected_lng,
+        drone_alt_m=event.drone_alt_m,
+        drone_heading_deg=event.drone_heading_deg,
     )
     db.add(row)
     db.commit()

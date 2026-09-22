@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Flame, Layers, Rewind } from 'lucide-react'
+import { Flame, Layers, Plane, Rewind } from 'lucide-react'
 import { reviewEvent } from '../lib/api'
 import { cn } from '@/lib/utils'
 import { GlowingEffect } from '@/components/glowing-effect'
@@ -65,8 +65,18 @@ function AlertCard({
                   <Flame size={9} /> Thermal
                 </span>
               )}
+              {e.sensor_mode === 'drone_simulated_telemetry' && (
+                <span className="flex shrink-0 items-center gap-1 rounded border border-sky-600/50 bg-sky-500/10 px-1 py-0.5 text-[9px] font-semibold uppercase text-sky-400">
+                  <Plane size={9} /> Drone (sim. telemetry)
+                </span>
+              )}
             </div>
             <div className="text-xs text-zinc-500">
+              {e.detected_lat != null && e.detected_lng != null && (
+                <span className="mr-2 font-mono text-sky-500">
+                  {e.detected_lat.toFixed(5)},{e.detected_lng.toFixed(5)}
+                </span>
+              )}
               {e.camera_id} · {timeAgo(e.created_at)} · conf {(e.confidence * 100).toFixed(0)}%
             </div>
           </div>
