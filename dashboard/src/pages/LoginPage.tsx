@@ -24,7 +24,7 @@ export default function LoginPage() {
           <div className="text-sm font-bold tracking-widest text-zinc-100">IBVAP C2 CONSOLE</div>
         </div>
         <div onSubmit={handleSubmit}>
-          <LoginForm />
+          <LoginForm onDemoLogin={() => navigate('/console')} />
         </div>
         <p className="mt-4 text-center text-[11px] text-zinc-600">
           Prototype build — no real authentication backend. This gate is UI-only.

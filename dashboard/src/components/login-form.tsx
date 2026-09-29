@@ -18,8 +18,9 @@ import { Input } from "@/components/ui/input"
 
 export function LoginForm({
   className,
+  onDemoLogin,
   ...props
-}: React.ComponentProps<"div">) {
+}: React.ComponentProps<"div"> & { onDemoLogin?: () => void }) {
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card>
@@ -58,6 +59,11 @@ export function LoginForm({
                 <Button variant="outline" type="button">
                   Login with Google
                 </Button>
+                {onDemoLogin && (
+                  <Button variant="secondary" type="button" onClick={onDemoLogin}>
+                    Demo Login (no credentials needed)
+                  </Button>
+                )}
                 <FieldDescription className="text-center">
                   Don&apos;t have an account? <a href="#">Sign up</a>
                 </FieldDescription>

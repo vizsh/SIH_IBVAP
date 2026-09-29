@@ -16,7 +16,28 @@ edge/*.pt
 edge/*.jpg
 edge/EasyOCR/
 
+# Model weights the pipelines actually load at start — without these a
+# fresh clone has no detector to run, which is exactly what broke the
+# demo on a teammate's machine. Small enough to check in directly (all
+# well under GitHub's 100MB file limit); no Git LFS needed.
+!edge/yolov8n.pt
+!edge/yolov8n-pose.pt
+!edge/thermal_person_yolov8.pt
+
 # misc
 demo_assets/*.mp4
 .DS_Store
 *.log
+
+# Demo footage scripts/manage.sh and edge/drone_pipeline.py actually feed
+# to the pipelines. Same reasoning as the model weights above — these are
+# the "camera input" for the whole prototype, not disposable scratch
+# files, so they're checked in rather than left for each clone to source
+# themselves. Two other clips in this folder (person_crouching_lakeside.mp4,
+# person_walking_highangle.mp4) are unused leftovers from manual testing
+# and stay ignored.
+!demo_assets/man_suspicious_border.mp4
+!demo_assets/nissan_plate_test.mp4
+!demo_assets/man_cattle_crossing_border.mp4
+!demo_assets/thermal_sentry_feed.mp4
+!demo_assets/drone_person_ricefield.mp4
